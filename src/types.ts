@@ -23,10 +23,6 @@ export interface Student {
   flags: number;
   goldCards: number;
   rank?: number;
-  birthDate?: string;
-  gender?: 'nam' | 'nữ' | string;
-  password?: string;
-  parentPassword?: string;
 }
 
 export interface Attendance {
@@ -48,7 +44,7 @@ export interface Violation {
   createdAt: string;
 }
 
-export type QuestionType = 'single_choice' | 'true_false' | 'matching' | 'fill_blank' | 'essay';
+export type QuestionType = 'single_choice' | 'true_false' | 'matching' | 'fill_blank';
 
 export interface Question {
   id: string;
@@ -67,14 +63,6 @@ export interface Question {
   blanksText?: string; // text with "..." markers
   blankChoices?: string[]; // list of words that can fit
   blankAnswers?: string[]; // list of correct words in order of "..."
-  // For essay
-  essayImages?: string[]; // base64 image strings
-  criteria?: string; // Model answer / grading criteria text
-  criteriaImages?: string[]; // Model answer / reference images (base64)
-  aiAutoGrade?: boolean; // Auto-grade with AI
-  aiReview?: boolean; // AI comments / feedback
-  aiSuggestions?: boolean; // AI suggestions for error fixing
-  aiImmediateResults?: boolean; // Return results immediately on submission
 }
 
 export interface Assignment {
@@ -85,40 +73,13 @@ export interface Assignment {
   attachments: { name: string; type: string; size?: string }[];
   links: { title: string; url: string }[];
   rewardStars: number;
-  week?: number; // week 1 to 35
-  grade?: string; // e.g. 'Lớp 3'
-  difficulty?: string; // e.g. 'Thông hiểu'
   criteria: {
     shuffleQuestions: boolean;
     mustGet100: boolean;
     onlyOneAttempt: boolean;
     timeLimitHours: number;
-    allowMultipleAttempts?: boolean;
-    oneTimeOnly?: boolean;
-    multipleTimes?: boolean;
-    shuffleOnRetry?: boolean;
-    autoGrade?: boolean;
-    autoStarPoints?: boolean;
-    saveDraftAllowed?: boolean;
-    showAnswersOnSubmit?: boolean;
-    limitTimeEnabled?: boolean;
-    limit24h?: boolean;
-    limit3days?: boolean;
-    autoLockOnExpiry?: boolean;
-    notifyParentOnUncompleted?: boolean;
-    earlyCompletionStar?: boolean;
-    lateSubmissionDeductStar?: boolean;
-    mustCompleteBeforeNew?: boolean;
-    allowedAttemptsCount?: '1' | '2' | '3' | 'unlimited';
-    startDate?: string;
-    startTime?: string;
-    endDate?: string;
-    endTime?: string;
-    rememberForReview?: boolean;
-    stillAllowedAfterExpiry?: boolean;
   };
   questions: Question[];
-  isDraft?: boolean;
   createdAt: string;
 }
 
@@ -133,26 +94,8 @@ export interface Submission {
   totalQuestions: number;
   timeSpentSeconds: number;
   submittedAt: string;
-  answers: { [questionId: string]: any }; // student answers per question (e.g. { text: string, images: string[] })
+  answers: { [questionId: string]: any }; // student answers per question
   attemptsCount: number;
-  aiGradedFeedback?: {
-    [questionId: string]: {
-      score: number;
-      maxScore: number;
-      correctAnswers: string[];
-      incorrectAnswers: string[];
-      comments: string;
-      suggestions: string;
-      learningAdvice: string;
-      gradedAt: string;
-      chatHistory?: { role: 'user' | 'model'; text: string }[];
-    };
-  };
-  isParentSeen?: boolean;
-  parentSeenAt?: string;
-  isStudentSeen?: boolean;
-  studentSeenAt?: string;
-  feedbackMessage?: string;
 }
 
 export interface Feedback {
@@ -164,7 +107,6 @@ export interface Feedback {
   message: string;
   isDraft: boolean;
   reply?: string;
-  isRead?: boolean;
   createdAt: string;
 }
 
@@ -175,60 +117,9 @@ export interface RewardRule {
   type: 'plus' | 'minus'; // plus for stars, minus for violations
 }
 
-export interface BoardBanner {
-  id: string;
-  type: 'image' | 'video';
-  url: string;
-  title: string;
-  description: string;
-  bgClass?: string;
-  duration?: number; // duration in seconds
-  note?: string; // custom note or caption about the image/video
-  isDraft?: boolean;
-  targetStudentIds?: string[];
-}
-
 export interface SystemSettings {
   starToFlagRatio: number; // 50 sao = 1 cờ
   flagToGoldRatio: number; // 10 cờ = 1 thẻ vàng
   rewardRules: RewardRule[];
   violationsList: string[];
-  banners: BoardBanner[];
-  parentFeedbackCount?: number; // e.g., parent responds 3 times
-  parentFeedbackRewardStars?: number; // gets 5 stars
-  defaultPassword?: string;
-  allowChangePassword?: boolean;
-}
-
-export interface ZaloNotification {
-  id: string;
-  recipientName: string;
-  phoneNumber: string;
-  message: string;
-  timestamp: string;
-  type: 'password_change' | 'parent_reminder' | 'teacher_alert';
-}
-
-export interface SavedAccount {
-  username: string;
-  role: UserRole;
-  passwordEncrypted: string;
-  rememberMe: boolean;
-  autoLogin: boolean;
-  lastLoginTime: string;
-  avatar?: string;
-  studentId?: string;
-  // Biometrics and security configurations
-  pinEnabled?: boolean;
-  pinCode?: string; // 4 digits
-  fingerprintEnabled?: boolean;
-  faceIdEnabled?: boolean;
-}
-
-export interface LoginHistoryEntry {
-  id: string;
-  username: string;
-  role: UserRole;
-  loginTime: string;
-  device: string;
 }
