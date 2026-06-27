@@ -1,0 +1,6 @@
+{
+  "name": "Hệ thống Quản lý Học tập Tiểu học",
+  "description": "Hệ thống quản lý học tập 3 tài khoản (Giáo viên, Học sinh, Phụ huynh) đồng bộ thời gian thực cho học sinh tiểu học",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
