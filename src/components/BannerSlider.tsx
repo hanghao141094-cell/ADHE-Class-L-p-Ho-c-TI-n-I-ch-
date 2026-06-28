@@ -5,56 +5,36 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Music, Music4, Volume2, VolumeX, Sparkles, Trophy } from 'lucide-react';
+import { Music, Music4, Volume2, VolumeX, Film, Image as ImageIcon, Sparkles, Trophy } from 'lucide-react';
 import { audioSynth } from './AudioSynthesizer';
-
-interface Slide {
-  id: number;
-  bgClass: string;
-  title: string;
-  subtitle: string;
-  icon: string;
-  accentText: string;
-}
-
-const SLIDES: Slide[] = [
-  {
-    id: 1,
-    bgClass: 'from-amber-400 via-pink-400 to-rose-400',
-    title: 'Chào mừng bé đến với Lớp Học Vui Vẻ! 🎉',
-    subtitle: 'Nơi mỗi ngày đến trường là một ngày ngập tràn niềm vui, sáng tạo và những bài học bổ ích mới lạ!',
-    icon: '🏫',
-    accentText: 'Chào mừng năm học mới!'
-  },
-  {
-    id: 2,
-    bgClass: 'from-cyan-400 via-teal-400 to-emerald-400',
-    title: 'Tích Sao Lấp Lánh - Đổi Thưởng To! ⭐',
-    subtitle: 'Mỗi bài phát biểu, việc làm tốt hay bài tập hoàn thành xuất sắc sẽ mang lại cho bé những ngôi sao vinh danh rực rỡ.',
-    icon: '✨',
-    accentText: '50 Sao = 1 Cờ Thi Đua!'
-  },
-  {
-    id: 3,
-    bgClass: 'from-purple-500 via-indigo-400 to-blue-400',
-    title: 'Ba Mẹ Và Thầy Cô Luôn Đồng Hành 💖',
-    subtitle: 'Gia đình và nhà trường kết nối tức thì, cập nhật điểm danh, bài học và gửi gắm những lời động viên ngọt ngào nhất.',
-    icon: '🏡',
-    accentText: 'Kết nối thời gian thực!'
-  }
-];
+import { useLMS } from '../context/LMSContext';
 
 export const BannerSlider: React.FC = () => {
+  const { settings } = useLMS();
   const [currentIdx, setCurrentIdx] = useState(0);
   const [musicPlaying, setMusicPlaying] = useState(false);
 
-  // Auto slide every 5 seconds
+  const bannersList = settings?.banners || [];
+
+  // Auto slide dynamically based on each banner's duration (default to 6s)
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentIdx(prev => (prev + 1) % SLIDES.length);
-    }, 5000);
-    return () => clearInterval(timer);
-  }, []);
+    if (bannersList.length <= 1) return;
+    const currentSlide = bannersList[currentIdx];
+    const slideDuration = (currentSlide?.duration || 5) * 1000;
+    
+    const timer = setTimeout(() => {
+      setCurrentIdx(prev => (prev + 1) % bannersList.length);
+    }, slideDuration);
+    
+    return () => clearTimeout(timer);
+  }, [bannersList.length, currentIdx, bannersList]);
+
+  // If active index gets out of bounds (e.g. after a deletion)
+  useEffect(() => {
+    if (currentIdx >= bannersList.length) {
+      setCurrentIdx(0);
+    }
+  }, [bannersList, currentIdx]);
 
   const toggleMusic = () => {
     if (musicPlaying) {
@@ -66,12 +46,25 @@ export const BannerSlider: React.FC = () => {
     }
   };
 
-  const currentSlide = SLIDES[currentIdx];
+  if (bannersList.length === 0) {
+    return (
+      <div className="relative w-full h-56 md:h-64 rounded-3xl overflow-hidden shadow-xl bg-gradient-to-r from-indigo-500 to-purple-600 p-6 md:p-8 text-white flex flex-col justify-between">
+        <div className="text-center my-auto space-y-2">
+          <Sparkles className="h-10 w-10 mx-auto animate-pulse text-amber-300" />
+          <h2 className="text-lg md:text-xl font-bold">Bảng tin lớp học trống</h2>
+          <p className="text-xs text-indigo-100 max-w-md mx-auto">Cô giáo có thể thêm tin giới thiệu hoạt động lớp học, hình ảnh, video trong phần "Cài đặt lớp học".</p>
+        </div>
+      </div>
+    );
+  }
+
+  const currentSlide = bannersList[currentIdx] || bannersList[0];
+  const defaultBg = currentSlide.bgClass || 'from-indigo-500 via-purple-500 to-pink-500';
 
   return (
-    <div className="relative w-full h-56 md:h-64 rounded-3xl overflow-hidden shadow-xl bg-gradient-to-r p-6 md:p-8 text-white flex flex-col justify-between transition-all duration-700">
+    <div className="relative w-full min-h-[22rem] md:h-80 rounded-3xl overflow-hidden shadow-xl bg-gradient-to-r p-4 text-white flex flex-col justify-between transition-all duration-700">
       {/* Background Gradient Layer */}
-      <div className={`absolute inset-0 bg-gradient-to-r ${currentSlide.bgClass} opacity-95 transition-all duration-1000 -z-10`} />
+      <div className={`absolute inset-0 bg-gradient-to-r ${defaultBg} opacity-95 transition-all duration-1000 -z-10`} />
       
       {/* Playful Vector Circles */}
       <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-2xl -mr-16 -mt-16 pointer-events-none" />
@@ -85,36 +78,89 @@ export const BannerSlider: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -15 }}
           transition={{ duration: 0.5 }}
-          className="flex flex-col md:flex-row items-center justify-between h-full gap-4 md:gap-8"
+          className="flex flex-col md:flex-row items-stretch justify-between h-full gap-5 w-full flex-grow pb-2"
         >
-          <div className="flex-1 space-y-2 text-center md:text-left">
-            <span className="inline-block px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-semibold tracking-wide border border-white/10 uppercase">
-              {currentSlide.accentText}
-            </span>
-            <h2 className="text-xl md:text-2xl font-bold tracking-tight drop-shadow-md">
-              {currentSlide.title}
-            </h2>
-            <p className="text-sm md:text-base text-white/90 font-medium leading-relaxed max-w-2xl">
-              {currentSlide.subtitle}
-            </p>
+          {/* Media box - takes left 3/4 area on desktop, full height and fully full bordered */}
+          <div className="flex-1 md:w-[73%] h-48 md:h-[15.5rem] bg-slate-950 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl relative group flex items-center justify-center shrink-0">
+            {currentSlide.url ? (
+              currentSlide.type === 'video' ? (
+                <video
+                  src={currentSlide.url}
+                  className="w-full h-full object-cover"
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                />
+              ) : (
+                <img
+                  src={currentSlide.url}
+                  alt={currentSlide.title}
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
+              )
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-indigo-600 to-purple-800 flex flex-col items-center justify-center p-4 text-center">
+                <ImageIcon className="h-10 w-10 text-white/40 mb-2 animate-bounce" />
+                <span className="text-xs text-white/50 font-bold">Hình ảnh/Video đang tải...</span>
+              </div>
+            )}
+            
+            {/* Tag overlay - no seconds count displayed as requested */}
+            <div className="absolute bottom-2.5 right-2.5 bg-black/70 backdrop-blur-md text-[9px] font-black px-2.5 py-1 rounded-md text-white tracking-wider uppercase shadow-md flex items-center gap-1">
+              {currentSlide.type === 'video' ? (
+                <>
+                  <Film className="h-3 w-3 text-amber-300 animate-pulse" />
+                  <span>VIDEO PHÓNG SỰ 🎥</span>
+                </>
+              ) : (
+                <>
+                  <ImageIcon className="h-3 w-3 text-amber-300" />
+                  <span>ẢNH HOẠT ĐỘNG 📷</span>
+                </>
+              )}
+            </div>
           </div>
-          
-          <div className="hidden md:flex items-center justify-center w-28 h-28 bg-white/15 backdrop-blur-md rounded-2xl border border-white/20 shadow-inner text-5xl">
-            {currentSlide.icon}
+
+          {/* Content panel - takes right 1/4 area on desktop, highly readable */}
+          <div className="w-full md:w-[27%] flex flex-col justify-between h-auto md:h-[15.5rem] space-y-2.5 bg-white/10 backdrop-blur-xs p-3.5 rounded-2xl border border-white/15 shadow-sm">
+            <div className="space-y-1.5 overflow-hidden">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-400 text-amber-950 rounded-full text-[9px] font-black tracking-wide uppercase shadow-xs">
+                <Sparkles className="h-2.5 w-2.5" />
+                <span>BẢNG TIN LỚP</span>
+              </span>
+              <h2 className="text-sm md:text-base font-black tracking-tight drop-shadow-md text-yellow-100 line-clamp-2 uppercase">
+                {currentSlide.title}
+              </h2>
+              <p className="text-[10px] md:text-xs text-white/95 font-semibold leading-relaxed bg-black/15 p-2 rounded-xl border border-white/5 overflow-y-auto max-h-[8rem] scrollbar-thin scrollbar-thumb-white/20">
+                {currentSlide.description}
+              </p>
+            </div>
+
+            {currentSlide.note && (
+              <div className="text-[9px] text-amber-200 bg-black/25 px-2 py-1.5 rounded-xl border border-white/10 backdrop-blur-xs font-black flex items-start space-x-1 shrink-0">
+                <span className="shrink-0">📝</span>
+                <span className="italic line-clamp-2">Ghi chú: {currentSlide.note}</span>
+              </div>
+            )}
           </div>
         </motion.div>
       </AnimatePresence>
 
       {/* Controls Footer */}
-      <div className="flex items-center justify-between mt-4 border-t border-white/10 pt-4 z-10">
+      <div className="flex items-center justify-between mt-4 border-t border-white/10 pt-3 z-10">
         {/* Bullets indicator */}
-        <div className="flex space-x-2">
-          {SLIDES.map((slide, idx) => (
+        <div className="flex space-x-1.5">
+          {bannersList.map((slide, idx) => (
             <button
               key={slide.id}
               onClick={() => setCurrentIdx(idx)}
-              className={`h-2.5 rounded-full transition-all duration-300 ${
-                idx === currentIdx ? 'w-6 bg-white' : 'w-2.5 bg-white/50 hover:bg-white/80'
+              className={`h-2 rounded-full transition-all duration-300 ${
+                idx === currentIdx ? 'w-5 bg-white' : 'w-2 bg-white/50 hover:bg-white/80'
               }`}
               aria-label={`Go to slide ${idx + 1}`}
             />
@@ -124,7 +170,7 @@ export const BannerSlider: React.FC = () => {
         {/* Calm study music toggle */}
         <button
           onClick={toggleMusic}
-          className={`flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs font-bold tracking-medium transition-all duration-300 border backdrop-blur-md ${
+          className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all duration-300 border backdrop-blur-md ${
             musicPlaying
               ? 'bg-emerald-500/80 hover:bg-emerald-600/85 border-emerald-400 text-white shadow-md animate-pulse'
               : 'bg-white/10 hover:bg-white/25 border-white/10 text-white'
@@ -132,12 +178,12 @@ export const BannerSlider: React.FC = () => {
         >
           {musicPlaying ? (
             <>
-              <Volume2 className="h-4.5 w-4.5 animate-bounce" />
-              <span>Đang phát nhạc lớp học 🎵</span>
+              <Volume2 className="h-3.5 w-3.5 animate-bounce" />
+              <span>Đang phát nhạc 🎵</span>
             </>
           ) : (
             <>
-              <VolumeX className="h-4.5 w-4.5" />
+              <VolumeX className="h-3.5 w-3.5" />
               <span>Bật nhạc lớp học 🔇</span>
             </>
           )}

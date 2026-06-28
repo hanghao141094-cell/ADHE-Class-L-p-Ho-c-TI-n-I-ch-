@@ -14,7 +14,8 @@ import {
   Feedback,
   SystemSettings,
   UserRole,
-  RewardRule
+  RewardRule,
+  ZaloNotification
 } from '../types';
 
 interface LMSContextType {
@@ -29,10 +30,15 @@ interface LMSContextType {
   submissions: Submission[];
   feedbacks: Feedback[];
   settings: SystemSettings;
+  zaloNotifications: ZaloNotification[];
+  sendZaloNotification: (recipientName: string, phoneNumber: string, message: string, type: 'password_change' | 'parent_reminder' | 'teacher_alert') => void;
+  teacherName: string;
+  setTeacherName: (name: string) => void;
   
   // Actions
   addStudent: (student: Omit<Student, 'stars' | 'flags' | 'goldCards' | 'rank'>) => void;
   deleteStudent: (id: string) => void;
+  updateStudent: (id: string, updatedData: Partial<Student>) => void;
   importStudents: (list: Omit<Student, 'stars' | 'flags' | 'goldCards' | 'rank'>[]) => void;
   
   markAttendance: (studentId: string, date: string, isAbsent: boolean, notes?: string) => void;
@@ -41,14 +47,19 @@ interface LMSContextType {
   addViolation: (studentId: string, violationType: string, message: string) => void;
   resolveViolation: (violationId: string, parentResponse: string) => void;
   
-  addAssignment: (assignment: Omit<Assignment, 'id' | 'createdAt'>) => void;
+  addAssignment: (assignment: Omit<Assignment, 'id' | 'createdAt'> & { id?: string; isDraft?: boolean }) => void;
+  deleteAssignment: (id: string) => void;
   saveSubmission: (submission: Submission) => void;
+  deleteSubmission: (studentId: string, assignmentId: string) => void;
   
   addFeedback: (feedback: Omit<Feedback, 'id' | 'createdAt' | 'parentName' | 'studentName'>) => void;
   replyFeedback: (feedbackId: string, reply: string) => void;
+  markFeedbackAsRead: (feedbackId: string) => void;
   
   updateSettings: (newSettings: SystemSettings) => void;
   rewardStars: (studentId: string, starsCount: number, reason: string) => void;
+  parentCheckedAssignments: { [key: string]: string };
+  markParentChecked: (assignmentId: string, studentId: string) => void;
   
   // Helper to re-calculate ranks
   recalculateRanks: (studentList: Student[]) => Student[];
@@ -97,7 +108,43 @@ const DEFAULT_SETTINGS: SystemSettings = {
     'Đi học muộn',
     'Không mặc đồng phục',
     'Quên mang đồ dùng học tập'
-  ]
+  ],
+  banners: [
+    {
+      id: 'b1',
+      type: 'image',
+      url: 'https://images.unsplash.com/photo-1577896851231-70ef18881754?w=1000&auto=format&fit=crop',
+      title: 'Chào mừng bé đến với Lớp Học Vui Vẻ! 🎉',
+      description: 'Nơi mỗi ngày đến trường là một ngày ngập tràn niềm vui, sáng tạo và những bài học bổ ích mới lạ! Lớp học được thiết kế hiện đại, đầy đủ tiện nghi cho bé tự do khám phá.',
+      bgClass: 'from-amber-400 via-pink-400 to-rose-400',
+      duration: 6,
+      note: 'Hình ảnh lớp học ngày đầu tiên nhập học đầy phấn khởi!'
+    },
+    {
+      id: 'b2',
+      type: 'image',
+      url: 'https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?w=1000&auto=format&fit=crop',
+      title: 'Tích Sao Lấp Lánh - Đổi Thưởng To! ⭐',
+      description: 'Mỗi bài phát biểu hăng hái, việc làm tốt giúp đỡ bạn bè hay bài tập hoàn thành xuất sắc sẽ mang lại cho bé những ngôi sao vinh danh rực rỡ từ cô chủ nhiệm.',
+      bgClass: 'from-cyan-400 via-teal-400 to-emerald-400',
+      duration: 8,
+      note: 'Các bé hào hứng giơ tay phát biểu để giành lấy những ngôi sao đầu tiên.'
+    },
+    {
+      id: 'b3',
+      type: 'video',
+      url: 'https://assets.mixkit.co/videos/preview/mixkit-kids-playing-and-laughing-in-classroom-42415-large.mp4',
+      title: 'Video Giới Thiệu Hoạt Động Lớp Học 🎥',
+      description: 'Các bé tham gia trò chơi tương tác đội nhóm sôi nổi trong tiết học Giáo dục Thể chất và Kỹ năng sống cuối tuần vừa qua.',
+      bgClass: 'from-purple-500 via-indigo-400 to-blue-400',
+      duration: 10,
+      note: 'Khoảnh khắc đáng yêu của nhóm Mặt Trời khi hoàn thành thử thách xếp lego!'
+    }
+  ],
+  parentFeedbackCount: 3,
+  parentFeedbackRewardStars: 5,
+  defaultPassword: '123',
+  allowChangePassword: true
 };
 
 // Default Assignments (demonstrating all 4 question types across multiple subjects)
@@ -106,7 +153,7 @@ const DEFAULT_ASSIGNMENTS: Assignment[] = [
     id: 'as_1',
     title: 'Phép nhân phép chia lớp 3',
     description: 'Bé hãy luyện tập các câu hỏi về phép nhân và phép chia trong bảng cửu chương nhé!',
-    subject: 'Toán học',
+    subject: 'Toán',
     attachments: [
       { name: 'Bang_Cuu_Chuong_Huong_Dan.pdf', type: 'pdf', size: '1.2 MB' }
     ],
@@ -268,7 +315,27 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // State definitions
-  const [currentUser, setCurrentUser] = useState<User>(() => loadState('lms_current_user', INITIAL_USERS[0]));
+  const [teacherName, setTeacherNameState] = useState<string>(() => {
+    return localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh';
+  });
+
+  const [currentUser, setCurrentUser] = useState<User>(() => {
+    const saved = localStorage.getItem('lms_current_user');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.role === 'teacher') {
+          parsed.name = localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh';
+        }
+        return parsed;
+      } catch (e) {
+        // Fallback
+      }
+    }
+    const defaultTeacher = { ...INITIAL_USERS[0] };
+    defaultTeacher.name = localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh';
+    return defaultTeacher;
+  });
   const [students, setStudents] = useState<Student[]>(() => {
     const raw = loadState<Student[]>('lms_students', INITIAL_STUDENTS);
     return recalculateRanks(raw);
@@ -279,6 +346,8 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [submissions, setSubmissions] = useState<Submission[]>(() => loadState('lms_submissions', DEFAULT_SUBMISSIONS));
   const [feedbacks, setFeedbacks] = useState<Feedback[]>(() => loadState('lms_feedbacks', DEFAULT_FEEDBACKS));
   const [settings, setSettings] = useState<SystemSettings>(() => loadState('lms_settings', DEFAULT_SETTINGS));
+  const [zaloNotifications, setZaloNotifications] = useState<ZaloNotification[]>(() => loadState('lms_zalo_notifications', []));
+  const [parentCheckedAssignments, setParentCheckedAssignments] = useState<{ [key: string]: string }>(() => loadState('lms_parent_checked', {}));
 
   // Helper to re-calculate ranks
   function recalculateRanks(studentList: Student[]): Student[] {
@@ -354,6 +423,14 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('lms_settings', JSON.stringify(settings));
   }, [settings]);
 
+  useEffect(() => {
+    localStorage.setItem('lms_zalo_notifications', JSON.stringify(zaloNotifications));
+  }, [zaloNotifications]);
+
+  useEffect(() => {
+    localStorage.setItem('lms_parent_checked', JSON.stringify(parentCheckedAssignments));
+  }, [parentCheckedAssignments]);
+
   // Real-time synchronization across browser tabs/windows
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
@@ -384,6 +461,12 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         case 'lms_settings':
           setSettings(val);
           break;
+        case 'lms_zalo_notifications':
+          setZaloNotifications(val);
+          break;
+        case 'lms_parent_checked':
+          setParentCheckedAssignments(val);
+          break;
       }
     };
     window.addEventListener('storage', handleStorageChange);
@@ -410,6 +493,19 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setStudents(prev => {
       const filtered = prev.filter(s => s.id !== id);
       return recalculateRanks(filtered);
+    });
+  };
+
+  // Action: Update Student
+  const updateStudent = (id: string, updatedData: Partial<Student>) => {
+    setStudents(prev => {
+      const updated = prev.map(s => {
+        if (s.id === id) {
+          return { ...s, ...updatedData };
+        }
+        return s;
+      });
+      return recalculateRanks(updated);
     });
   };
 
@@ -484,14 +580,32 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  // Action: Add Assignment
-  const addAssignment = (assignmentData: Omit<Assignment, 'id' | 'createdAt'>) => {
-    const newAssignment: Assignment = {
-      ...assignmentData,
-      id: `as_${Date.now()}`,
-      createdAt: new Date().toISOString()
-    };
-    setAssignments(prev => [newAssignment, ...prev]);
+  // Action: Add / Update / Save Draft Assignment
+  const addAssignment = (assignmentData: Omit<Assignment, 'id' | 'createdAt'> & { id?: string; isDraft?: boolean }) => {
+    setAssignments(prev => {
+      if (assignmentData.id) {
+        const idx = prev.findIndex(a => a.id === assignmentData.id);
+        if (idx > -1) {
+          const updated = [...prev];
+          updated[idx] = {
+            ...updated[idx],
+            ...assignmentData,
+            createdAt: updated[idx].createdAt // Keep original created timestamp
+          } as Assignment;
+          return updated;
+        }
+      }
+      const newAssignment: Assignment = {
+        ...assignmentData,
+        id: assignmentData.id || `as_${Date.now()}`,
+        createdAt: new Date().toISOString()
+      } as Assignment;
+      return [newAssignment, ...prev];
+    });
+  };
+
+  const deleteAssignment = (id: string) => {
+    setAssignments(prev => prev.filter(a => a.id !== id));
   };
 
   // Action: Save Submission
@@ -530,26 +644,48 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Action: Delete/Reset Submission
+  const deleteSubmission = (studentId: string, assignmentId: string) => {
+    setSubmissions(prev => prev.filter(s => !(s.studentId === studentId && s.assignmentId === assignmentId)));
+  };
+
   // Action: Add Feedback (Parent sends to Teacher)
   const addFeedback = (fbData: Omit<Feedback, 'id' | 'createdAt' | 'parentName' | 'studentName'>) => {
-    const parent = INITIAL_USERS.find(u => u.id === fbData.parentId);
     const student = students.find(s => s.id === fbData.studentId);
-    if (!student || !parent) return;
+    if (!student) return;
 
     const newFeedback: Feedback = {
       ...fbData,
       id: `fb_${Date.now()}`,
-      parentName: parent.name.split(' (')[0],
+      parentName: student.parentName,
       studentName: student.name,
       createdAt: new Date().toISOString()
     };
+    
+    // Count how many feedbacks this parent has submitted for this student so far (including this new one)
+    const count = feedbacks.filter(f => f.studentId === fbData.studentId).length + 1;
+    const requiredCount = settings.parentFeedbackCount || 3;
+    const rewardStarsAmt = settings.parentFeedbackRewardStars || 5;
+
     setFeedbacks(prev => [newFeedback, ...prev]);
+
+    if (count % requiredCount === 0) {
+      rewardStars(student.id, rewardStarsAmt, `Phụ huynh phản hồi tích cực đủ ${requiredCount} lần`);
+      alert(`🎉 Tuyệt vời! Phụ huynh đã phản hồi tích cực đủ ${requiredCount} lần. Bé ${student.name} được cộng thưởng +${rewardStarsAmt} Sao ⭐ vào bảng xếp hạng thi đua!`);
+    }
   };
 
   // Action: Reply Feedback (Teacher replies)
   const replyFeedback = (feedbackId: string, reply: string) => {
     setFeedbacks(prev =>
-      prev.map(fb => (fb.id === feedbackId ? { ...fb, reply } : fb))
+      prev.map(fb => (fb.id === feedbackId ? { ...fb, reply, isRead: true } : fb))
+    );
+  };
+
+  // Action: Mark Feedback As Read
+  const markFeedbackAsRead = (feedbackId: string) => {
+    setFeedbacks(prev =>
+      prev.map(fb => (fb.id === feedbackId ? { ...fb, isRead: true } : fb))
     );
   };
 
@@ -587,12 +723,65 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSettings(newSettings);
   };
 
+  // Action: Send Zalo Notification
+  const sendZaloNotification = (recipientName: string, phoneNumber: string, message: string, type: 'password_change' | 'parent_reminder' | 'teacher_alert') => {
+    const newNotif: ZaloNotification = {
+      id: `zalo_${Date.now()}_${Math.round(Math.random() * 10000)}`,
+      recipientName,
+      phoneNumber,
+      message,
+      timestamp: new Date().toISOString(),
+      type
+    };
+    setZaloNotifications(prev => [newNotif, ...prev]);
+  };
+
+  // Action: Mark Assignment as Checked and Reminded by Parent
+  const markParentChecked = (assignmentId: string, studentId: string) => {
+    const key = `${assignmentId}_${studentId}`;
+    setParentCheckedAssignments(prev => ({
+      ...prev,
+      [key]: new Date().toISOString()
+    }));
+  };
+
+  const setTeacherName = (name: string) => {
+    setTeacherNameState(name);
+    localStorage.setItem('lms_teacher_name', name);
+    setCurrentUser(prev => {
+      if (prev.role === 'teacher') {
+        const updated = { ...prev, name };
+        localStorage.setItem('lms_current_user', JSON.stringify(updated));
+        return updated;
+      }
+      return prev;
+    });
+  };
+
+  const dynamicAvailableUsers: User[] = [
+    { id: 'teacher_1', name: teacherName, avatar: '👩‍🏫', role: 'teacher' },
+    ...students.filter(s => s.isActive !== false).map(s => ({
+      id: s.id,
+      name: s.name,
+      avatar: s.avatar || '👦',
+      role: 'student' as const,
+      studentId: s.id
+    })),
+    ...students.filter(s => s.isActive !== false).map(s => ({
+      id: 'parent_' + s.id,
+      name: `Phụ huynh em ${s.name}`,
+      avatar: '👨',
+      role: 'parent' as const,
+      studentId: s.id
+    }))
+  ];
+
   return (
     <LMSContext.Provider
       value={{
         currentUser,
         setCurrentUser,
-        availableUsers: INITIAL_USERS,
+        availableUsers: dynamicAvailableUsers,
         students,
         setStudents,
         attendanceList,
@@ -601,17 +790,27 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         submissions,
         feedbacks,
         settings,
+        zaloNotifications,
+        sendZaloNotification,
+        parentCheckedAssignments,
+        markParentChecked,
+        teacherName,
+        setTeacherName,
         addStudent,
         deleteStudent,
+        updateStudent,
         importStudents,
         markAttendance,
         deleteAttendance,
         addViolation,
         resolveViolation,
         addAssignment,
+        deleteAssignment,
         saveSubmission,
+        deleteSubmission,
         addFeedback,
         replyFeedback,
+        markFeedbackAsRead,
         updateSettings,
         rewardStars,
         recalculateRanks
