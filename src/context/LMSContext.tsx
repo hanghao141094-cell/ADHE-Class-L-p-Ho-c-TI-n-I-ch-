@@ -32,8 +32,6 @@ interface LMSContextType {
   settings: SystemSettings;
   zaloNotifications: ZaloNotification[];
   sendZaloNotification: (recipientName: string, phoneNumber: string, message: string, type: 'password_change' | 'parent_reminder' | 'teacher_alert') => void;
-  teacherName: string;
-  setTeacherName: (name: string) => void;
   
   // Actions
   addStudent: (student: Omit<Student, 'stars' | 'flags' | 'goldCards' | 'rank'>) => void;
@@ -114,8 +112,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
       id: 'b1',
       type: 'image',
       url: 'https://images.unsplash.com/photo-1577896851231-70ef18881754?w=1000&auto=format&fit=crop',
-      title: 'Chào mừng bé đến với Lớp Học Vui Vẻ! 🎉',
-      description: 'Nơi mỗi ngày đến trường là một ngày ngập tràn niềm vui, sáng tạo và những bài học bổ ích mới lạ! Lớp học được thiết kế hiện đại, đầy đủ tiện nghi cho bé tự do khám phá.',
+      title: 'Chào mừng bé đến với ADHE Class! 🎉',
+      description: 'Học tập tiện ích, tương tác thông minh cùng thầy cô, bạn bè và gia đình.',
       bgClass: 'from-amber-400 via-pink-400 to-rose-400',
       duration: 6,
       note: 'Hình ảnh lớp học ngày đầu tiên nhập học đầy phấn khởi!'
@@ -315,27 +313,7 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // State definitions
-  const [teacherName, setTeacherNameState] = useState<string>(() => {
-    return localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh';
-  });
-
-  const [currentUser, setCurrentUser] = useState<User>(() => {
-    const saved = localStorage.getItem('lms_current_user');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.role === 'teacher') {
-          parsed.name = localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh';
-        }
-        return parsed;
-      } catch (e) {
-        // Fallback
-      }
-    }
-    const defaultTeacher = { ...INITIAL_USERS[0] };
-    defaultTeacher.name = localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh';
-    return defaultTeacher;
-  });
+  const [currentUser, setCurrentUser] = useState<User>(() => loadState('lms_current_user', INITIAL_USERS[0]));
   const [students, setStudents] = useState<Student[]>(() => {
     const raw = loadState<Student[]>('lms_students', INITIAL_STUDENTS);
     return recalculateRanks(raw);
@@ -745,21 +723,8 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
-  const setTeacherName = (name: string) => {
-    setTeacherNameState(name);
-    localStorage.setItem('lms_teacher_name', name);
-    setCurrentUser(prev => {
-      if (prev.role === 'teacher') {
-        const updated = { ...prev, name };
-        localStorage.setItem('lms_current_user', JSON.stringify(updated));
-        return updated;
-      }
-      return prev;
-    });
-  };
-
   const dynamicAvailableUsers: User[] = [
-    { id: 'teacher_1', name: teacherName, avatar: '👩‍🏫', role: 'teacher' },
+    { id: 'teacher_1', name: localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh', avatar: '👩‍🏫', role: 'teacher' },
     ...students.filter(s => s.isActive !== false).map(s => ({
       id: s.id,
       name: s.name,
@@ -794,8 +759,6 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         sendZaloNotification,
         parentCheckedAssignments,
         markParentChecked,
-        teacherName,
-        setTeacherName,
         addStudent,
         deleteStudent,
         updateStudent,

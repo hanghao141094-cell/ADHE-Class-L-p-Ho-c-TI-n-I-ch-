@@ -199,7 +199,7 @@ export const ParentView: React.FC = () => {
               Cổng Liên Lạc Phụ Huynh: {currentUser.name}
             </h2>
             <p className="text-xs text-slate-400 font-bold mt-1 uppercase tracking-wider">
-              Phụ huynh em: <span className="text-emerald-600 font-black">{childStudent.name}</span> (Lớp 3A | GVCN: Cô Mai Anh)
+              Phụ huynh em: <span className="text-emerald-600 font-black">{childStudent.name}</span> (Lớp 3A | GVCN: {localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh'})
             </p>
           </div>
         </div>
@@ -739,7 +739,7 @@ export const ParentView: React.FC = () => {
                               
                               {fb.reply ? (
                                 <div className="bg-emerald-50 border border-emerald-150 p-2.5 rounded-lg text-xs space-y-0.5 text-slate-600">
-                                  <span className="font-black text-emerald-700 block text-[10px]">Cô Mai Anh phản hồi:</span>
+                                  <span className="font-black text-emerald-700 block text-[10px]">{localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh'} phản hồi:</span>
                                   <p className="italic">"{fb.reply}"</p>
                                 </div>
                               ) : (

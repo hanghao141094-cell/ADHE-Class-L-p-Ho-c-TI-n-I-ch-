@@ -349,6 +349,64 @@ Cô giáo AI hãy phản hồi trực tiếp:
     }
   });
 
+  // API Route: AI Report & Pedagogical Recommendations Generator
+  app.post("/api/gemini/report", async (req, res) => {
+    try {
+      const { 
+        subject, 
+        assignmentTitle, 
+        percent, 
+        avgScore, 
+        maxScore, 
+        minScore, 
+        doneCount, 
+        totalCount, 
+        notDoneCount, 
+        parentCheckedCount,
+        feedbacksText
+      } = req.body;
+
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ 
+          error: "GEMINI_API_KEY is not configured on the server. Please add it in Settings > Secrets." 
+        });
+      }
+
+      const promptText = `
+Hãy đóng vai trò là một Chuyên gia Sư phạm và Cố vấn Học thuật Tiểu học xuất sắc. Bạn đang viết một bản báo cáo phân tích chuyên sâu cho Giáo viên chủ nhiệm về kết quả một nhiệm vụ học tập của lớp.
+Thông tin nhiệm vụ học tập:
+- Môn học: ${subject || "Chưa rõ"}
+- Nhiệm vụ/Bài tập: "${assignmentTitle || "Bài tập rèn luyện"}"
+- Tỷ lệ hoàn thành: ${percent || 0}% (${doneCount}/${totalCount} học sinh đã nộp)
+- Điểm trung bình của lớp: ${avgScore || 0}/10
+- Điểm cao nhất: ${maxScore || 0}/10, Điểm thấp nhất: ${minScore || 0}/10
+- Số học sinh chưa hoàn thành: ${notDoneCount || 0} em
+- Số phụ huynh đã đồng hành kiểm tra bài cùng con: ${parentCheckedCount || 0}/${totalCount} phụ huynh
+- Các ý kiến/góp ý từ phụ huynh liên quan: "${feedbacksText || "Không có góp ý trực tiếp nào"}"
+
+[Yêu cầu báo cáo]:
+Hãy tạo một báo cáo sư phạm có cấu trúc rõ ràng, sinh động, dễ chịu và ấm áp bằng tiếng Việt. Báo cáo gồm các mục sau:
+1. 🤖 **Đánh Giá Tiến Độ & Mức Độ Chuyên Cần**: Nhận xét về tỷ lệ nộp bài (${percent}%). Khen ngợi tinh thần học tập của các con hoặc khuyên giáo viên cách thức khích lệ các bé chưa nộp bài.
+2. 📈 **Phân Tích Chất Lượng Học Tập**: Đánh giá phổ điểm số (Trung bình ${avgScore}, Cao nhất ${maxScore}, Thấp nhất ${minScore}). Nêu rõ học sinh đã nắm vững kiến thức đến đâu.
+3. 🏡 **Góc Kết Nối Gia Đình (Độ Đồng Hành)**: Bình luận về số lượng phụ huynh (${parentCheckedCount}/${totalCount}) tham gia đồng hành cùng con. Phân tích các ý kiến của phụ huynh (nếu có) để đưa ra định hướng giao tiếp phù hợp.
+4. 💡 **Đề Xuất Sư Phạm Của Chuyên Gia AI**: Đưa ra 3 khuyến nghị cụ thể, thiết thực và dễ thực hiện cho giáo viên chủ nhiệm để cải thiện chất lượng học tập của lớp trong tuần tiếp theo.
+
+Hãy trình bày sinh động bằng cách sử dụng các biểu tượng dễ thương phù hợp với học đường tiểu học (🌟, 📖, 🏫, 🎉, 📝, ❤️). Không dùng định dạng markdown quá phức tạp, dùng gạch đầu dòng rõ ràng.
+`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: promptText,
+      });
+
+      res.json({ text: response.text });
+
+    } catch (error: any) {
+      console.error("AI Report Generation Error:", error);
+      res.status(500).json({ error: error?.message || "Đã xảy ra lỗi khi AI phân tích kết quả." });
+    }
+  });
+
   // Serve static files in production or hook up Vite middleware in development
   if (process.env.NODE_ENV === "production") {
     const distPath = path.join(process.cwd(), "dist");

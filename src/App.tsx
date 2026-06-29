@@ -134,7 +134,7 @@ function DashboardContainer() {
                 <span>ADHE Class</span>
                 <span className="text-[10px] bg-indigo-150 text-indigo-800 px-1.5 py-0.5 rounded font-black font-mono">Lớp học tiện ích</span>
               </h1>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Trường tiểu học thông minh</p>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">ADHE Class - LỚP HỌC TIỆN ÍCH</p>
             </div>
           </button>
 
@@ -329,7 +329,7 @@ function DashboardContainer() {
                         <h2 className="text-base font-black text-amber-950 uppercase tracking-tight">
                           QUẢN LÝ LỚP HỌC & NHIỆM VỤ
                         </h2>
-                        <span className="text-xs font-bold text-slate-400 lowercase">🎒 ⭐ 🏅 Chi tiết góc lớp học vui vẻ</span>
+                        <span className="text-xs font-bold text-slate-400 lowercase">🎒 ⭐ 🏅 Góc Lớp Học Tiện Ích</span>
                       </div>
                     </div>
 

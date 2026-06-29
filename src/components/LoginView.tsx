@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   GraduationCap, Users, UserCheck, Eye, EyeOff, Lock, User, 
   Sparkles, ShieldCheck, History, X, Check, Fingerprint, Smile, KeyRound,
-  Download, Upload, Save
+  Download, Upload
 } from 'lucide-react';
 import { UserRole, SavedAccount, LoginHistoryEntry } from '../types';
 import { audioSynth } from './AudioSynthesizer';
@@ -38,31 +38,24 @@ const getDeviceName = (): string => {
 };
 
 export const LoginView: React.FC = () => {
-  const { students, setStudents, recalculateRanks, settings, setCurrentUser, teacherName, setTeacherName } = useLMS();
+  const { students, setStudents, recalculateRanks, settings, setCurrentUser } = useLMS();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selectedRole, setSelectedRole] = useState<UserRole>('student');
-  const [pendingImport, setPendingImport] = useState<{
-    teacherName: string;
-    students: any[];
-    fileName: string;
-  } | null>(null);
 
   const handleDownloadTemplate = () => {
     audioSynth.playBubblePop();
-    const headers = "STT,Họ và tên,Giới tính,Họ tên phụ huynh,Số điện thoại";
+    const headers = "STT,Họ và tên học sinh,Giới tính,Họ tên phụ huynh,Số điện thoại,Giáo viên chủ nhiệm,Học sinh";
     const rows = [
-      "1,Cô giáo Mai Anh (GVCN),Nữ,Không có,0912345678",
-      "2,Nguyễn An,Nam,Anh Nguyễn Thành,0912345678",
-      "3,Trần Bình,Nam,Anh Trần Hùng,0923456789",
-      "4,Lê Vy,Nữ,Chị Lê Hải,0934567890",
-      "5,Phạm Dung,Nữ,Anh Phạm Nam,0945678901"
+      "1,Nguyễn Văn An,Nam,Anh Nguyễn Văn Bình,0912345678,Không,Có",
+      "2,Nguyễn Thị Mai,Nữ,Chị Nguyễn Thị Hà,0987654321,Không,Có",
+      "3,Nguyễn Quốc Huy,Nam,Anh Nguyễn Quốc Bảo,0905556677,Có,Có"
     ];
     const csvContent = "\uFEFF" + [headers, ...rows].join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", "mau_danh_sach_lop_hoc.csv");
+    link.setAttribute("download", "mau_danh_sach_hoc_sinh.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -91,8 +84,6 @@ export const LoginView: React.FC = () => {
         }
 
         const parsedList: any[] = [];
-        let importedTeacherName = 'Cô giáo Mai Anh';
-
         for (let i = startIndex; i < lines.length; i++) {
           const line = lines[i];
           let cols = line.split(',');
@@ -106,22 +97,23 @@ export const LoginView: React.FC = () => {
           const gender = cols[2] ? cols[2].trim() : 'Nam';
           const parentName = cols[3] ? cols[3].trim() : '';
           const parentPhone = cols[4] ? cols[4].trim() : '';
+          const gvcnCol = cols[5] ? cols[5].trim().toLowerCase() : 'không';
+          const hsCol = cols[6] ? cols[6].trim().toLowerCase() : 'có';
 
           if (!name) continue;
 
           const isGVCN = i === startIndex;
+          const isHS = i > startIndex;
 
-          if (isGVCN) {
-            importedTeacherName = name.replace(/\s*\(GVCN\)/gi, '').trim();
-          } else {
-            parsedList.push({
-              stt,
-              name,
-              gender: gender.toLowerCase().includes('nữ') ? 'Nữ' : 'Nam',
-              parentName: parentName || `Phụ huynh em ${name}`,
-              parentPhone: parentPhone
-            });
-          }
+          parsedList.push({
+            stt,
+            name,
+            gender: gender.toLowerCase().includes('nữ') ? 'Nữ' : 'Nam',
+            parentName: parentName || `Phụ huynh em ${name}`,
+            parentPhone: parentPhone,
+            isTeacherClass: isGVCN,
+            isStudentSelect: isHS
+          });
         }
 
         if (parsedList.length === 0) {
@@ -159,8 +151,8 @@ export const LoginView: React.FC = () => {
               : ['👦', '🦁', '🦖', '🐼', '🦊'][Math.floor(Math.random() * 5)],
             studentCode,
             isActive: true, // Auto-activated as part of updating/replacing list
-            isTeacherClass: false,
-            isStudentSelect: true,
+            isTeacherClass: stu.isTeacherClass,
+            isStudentSelect: stu.isStudentSelect,
             stars: 0,
             flags: 0,
             goldCards: 0,
@@ -169,12 +161,8 @@ export const LoginView: React.FC = () => {
         });
 
         if (listToImport.length > 0) {
-          setPendingImport({
-            teacherName: importedTeacherName,
-            students: listToImport,
-            fileName: file.name
-          });
-          alert(`Tải file "${file.name}" thành công! Vui lòng nhấn nút "Lưu vào hệ thống" bên dưới để cập nhật danh sách lớp.`);
+          setStudents(recalculateRanks(listToImport));
+          alert("Danh sách đã được cập nhật từ file vừa tải lên.");
         } else {
           alert('Không có học sinh hợp lệ nào được tải lên!');
         }
@@ -184,16 +172,6 @@ export const LoginView: React.FC = () => {
       }
     };
     reader.readAsText(file, 'UTF-8');
-    e.target.value = '';
-  };
-
-  const handleSavePendingImport = () => {
-    if (!pendingImport) return;
-    audioSynth.playBubblePop();
-    setTeacherName(pendingImport.teacherName);
-    setStudents(recalculateRanks(pendingImport.students));
-    setPendingImport(null);
-    alert(`Đã lưu danh sách vào hệ thống thành công!\n- Giáo viên chủ nhiệm: ${pendingImport.teacherName}\n- Tổng số học sinh: ${pendingImport.students.length}\nDữ liệu lớp học và tài khoản đã được đồng bộ ngay lập tức.`);
   };
 
   // Form states
@@ -289,7 +267,7 @@ export const LoginView: React.FC = () => {
     if (role === 'teacher') {
       userToSet = {
         id: 'teacher_1',
-        name: 'Cô giáo Mai Anh',
+        name: localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh',
         avatar: '👩‍🏫',
         role: 'teacher' as UserRole
       };
@@ -380,13 +358,15 @@ export const LoginView: React.FC = () => {
     const inputPass = password.trim();
 
     if (selectedRole === 'teacher') {
-      const isValidTeacherName = inputName === 'cô giáo mai anh' || inputName === 'mai anh' || inputName === 'cô mai anh';
+      const currentTeacherName = (localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh').trim().toLowerCase();
+      const isValidTeacherName = inputName === 'cô giáo mai anh' || inputName === 'mai anh' || inputName === 'cô mai anh' || inputName === currentTeacherName || currentTeacherName.includes(inputName) || inputName.includes(currentTeacherName);
       const isTeacherPassCorrect = inputPass === defaultPasswordVal || inputPass === '123' || inputPass === 'admin';
 
       if (isValidTeacherName && isTeacherPassCorrect) {
-        performActualLogin('teacher', 'Cô giáo Mai Anh', inputPass);
+        performActualLogin('teacher', localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh', inputPass);
       } else {
-        setErrorMessage('Tên Giáo viên hoặc Mật khẩu không chính xác! (Gợi ý: Mai Anh / pass: ' + defaultPasswordVal + ')');
+        const teacherSug = localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh';
+        setErrorMessage('Tên Giáo viên hoặc Mật khẩu không chính xác! (Gợi ý: ' + teacherSug + ' / pass: ' + defaultPasswordVal + ')');
       }
     } else if (selectedRole === 'student') {
       const foundStudent = students.find(s => 
@@ -518,7 +498,7 @@ export const LoginView: React.FC = () => {
 
     // 2. Add defaults if not already present
     if (!list.some(i => i.role === 'teacher')) {
-      list.push({ name: 'Cô giáo Mai Anh', role: 'teacher', avatar: '👩‍🏫' });
+      list.push({ name: localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh', role: 'teacher', avatar: '👩‍🏫' });
     }
     students.forEach(s => {
       if (!list.some(i => i.name.toLowerCase() === s.name.toLowerCase() && i.role === 'student')) {
@@ -572,10 +552,10 @@ export const LoginView: React.FC = () => {
             <span className="p-3 bg-indigo-500 text-white rounded-2xl text-2xl shadow-md">🏫</span>
             <div>
               <h1 className="text-lg font-black text-indigo-950 uppercase tracking-tight">
-                Cổng Lớp Học Vui Vẻ
+                ADHE Class
               </h1>
               <p className="text-[11px] text-indigo-700 font-bold mt-0.5 uppercase tracking-wide">
-                Trường tiểu học thông minh
+                LỚP HỌC TIỆN ÍCH
               </p>
             </div>
           </div>
@@ -618,7 +598,7 @@ export const LoginView: React.FC = () => {
                   audioSynth.playBubblePop();
                   setSelectedRole('teacher');
                   setErrorMessage('');
-                  setFullName('Cô giáo Mai Anh');
+                  setFullName(localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh');
                 }}
                 className={`py-3.5 px-3 rounded-2xl border-2 text-center flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs ${
                   selectedRole === 'teacher'
@@ -914,41 +894,6 @@ export const LoginView: React.FC = () => {
             </label>
           </div>
         </div>
-
-        {pendingImport && (
-          <div className="bg-emerald-950/60 border border-emerald-500/40 p-4 rounded-2xl text-left space-y-3 animate-fadeIn">
-            <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2">
-              <span className="text-xs font-black text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-                <span>📁 Tệp tin đã nạp:</span>
-                <span className="text-white normal-case font-bold">{pendingImport.fileName}</span>
-              </span>
-              <button 
-                type="button"
-                onClick={() => setPendingImport(null)}
-                className="text-[10px] text-rose-400 font-extrabold hover:underline uppercase"
-              >
-                Hủy bỏ ✕
-              </button>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-semibold text-emerald-100">
-              <div>
-                • Giáo viên chủ nhiệm: <strong className="text-yellow-400">{pendingImport.teacherName}</strong>
-              </div>
-              <div>
-                • Số lượng học sinh: <strong className="text-yellow-400">{pendingImport.students.length} em</strong>
-              </div>
-            </div>
-            
-            <button
-              type="button"
-              onClick={handleSavePendingImport}
-              className="w-full flex items-center justify-center space-x-2 py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl text-xs font-black cursor-pointer shadow-lg transition-all uppercase tracking-wider active:scale-95"
-            >
-              <Save className="h-4 w-4 shrink-0 animate-pulse" />
-              <span>Lưu vào hệ thống 💾</span>
-            </button>
-          </div>
-        )}
         
         <div className="bg-indigo-950/80 p-3.5 rounded-xl border border-indigo-800/60 text-[11px] text-indigo-200 font-bold leading-relaxed text-left">
           💡 <strong>Cấu trúc file mẫu danh sách:</strong> Cấu trúc file mẫu được quy định như sau: dòng đầu tiên mặc định là thông tin Giáo viên, từ dòng thứ hai trở đi là danh sách Học sinh. Hệ thống sẽ tự động nhận diện và phân loại dữ liệu theo cấu trúc này khi nhập danh sách vào cơ sở dữ liệu. Việc bố trí hai nút chức năng này giúp giáo viên dễ dàng thực hiện quy trình tải mẫu, nhập dữ liệu và đồng bộ danh sách học sinh một cách nhanh chóng, thuận tiện và chính xác.

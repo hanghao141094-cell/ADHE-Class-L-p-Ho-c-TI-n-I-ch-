@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLMS } from '../context/LMSContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { AssignmentFrames } from './AssignmentFrames';
@@ -62,6 +62,8 @@ const SUBJECT_COLORS: { [subject: string]: { bg: string, activeBg: string, hover
 
 export const TeacherView: React.FC = () => {
   const {
+    currentUser,
+    setCurrentUser,
     students,
     setStudents,
     recalculateRanks,
@@ -86,16 +88,10 @@ export const TeacherView: React.FC = () => {
     updateSettings,
     rewardStars,
     sendZaloNotification,
-    teacherName,
-    setTeacherName
+    parentCheckedAssignments
   } = useLMS();
 
   const [isClassroomCollapsed, setIsClassroomCollapsed] = useState(false);
-  const [pendingImport, setPendingImport] = useState<{
-    teacherName: string;
-    students: any[];
-    fileName: string;
-  } | null>(null);
 
   // Navigation
   const [activeTab, setActiveTab] = useState<'dashboard' | 'students' | 'assignments' | 'progress' | 'feedback' | 'settings' | 'review_bank'>('dashboard');
@@ -129,6 +125,20 @@ export const TeacherView: React.FC = () => {
   const [aiDuration, setAiDuration] = useState('15 phút');
   const [aiDifficultyLevel, setAiDifficultyLevel] = useState('Trung bình');
   const [aiResourceLink, setAiResourceLink] = useState('');
+
+  // File import states
+  const [pendingImportedStudents, setPendingImportedStudents] = useState<any[] | null>(null);
+  const [pendingTeacherName, setPendingTeacherName] = useState<string>('');
+
+  // AI Assistant Image Linkage states and refs
+  const [topicLinkedImages, setTopicLinkedImages] = useState<string[]>([]);
+  const [lessonLinkedImages, setLessonLinkedImages] = useState<string[]>([]);
+  const topicImageInputRef = useRef<HTMLInputElement>(null);
+  const lessonImageInputRef = useRef<HTMLInputElement>(null);
+
+  // Analytical Reports states
+  const [generatingReportId, setGeneratingReportId] = useState<string | null>(null);
+  const [generatedReports, setGeneratedReports] = useState<{[key: string]: string}>({});
 
   // Online Exercise Bank State (classified by Subject, Grade, Week, Topic, Difficulty)
   const [onlineExercises, setOnlineExercises] = useState<Assignment[]>(() => {
@@ -664,16 +674,17 @@ export const TeacherView: React.FC = () => {
 
   const handleDownloadTemplate = () => {
     audioSynth.playBubblePop();
-    const headers = "STT,Họ và tên học sinh,Giới tính,Họ tên phụ huynh,Số điện thoại,Giáo viên chủ nhiệm,Học sinh";
-    const sample1 = "1,Nguyễn Văn An,Nam,Anh Nguyễn Văn Bình,0912345678,Không,Có";
-    const sample2 = "2,Nguyễn Thị Mai,Nữ,Chị Nguyễn Thị Hà,0987654321,Không,Có";
-    const sample3 = "3,Nguyễn Quốc Huy,Nam,Anh Nguyễn Quốc Bảo,0905556677,Có,Có";
-    const csvContent = "\uFEFF" + [headers, sample1, sample2, sample3].join("\n");
+    const headers = "STT,Họ và tên,Giới tính,Họ tên phụ huynh,Số điện thoại";
+    const sampleTeacher = "1,Cô giáo Mai Anh,Nữ,Chưa có,0901234567";
+    const sampleStudent1 = "2,Nguyễn Văn An,Nam,Anh Nguyễn Văn Bình,0912345678";
+    const sampleStudent2 = "3,Nguyễn Thị Mai,Nữ,Chị Nguyễn Thị Hà,0987654321";
+    const sampleStudent3 = "4,Nguyễn Quốc Huy,Nam,Anh Nguyễn Quốc Bảo,0905556677";
+    const csvContent = "\uFEFF" + [headers, sampleTeacher, sampleStudent1, sampleStudent2, sampleStudent3].join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", "mau_danh_sach_hoc_sinh.csv");
+    link.setAttribute("download", "mau_danh_sach_lop_hoc.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -697,16 +708,24 @@ export const TeacherView: React.FC = () => {
 
         let startIndex = 0;
         const firstLine = lines[0].toLowerCase();
-        if (firstLine.includes('họ và tên') || firstLine.includes('học sinh') || firstLine.includes('giới tính') || firstLine.includes('stt')) {
+        if (firstLine.includes('họ và tên') || firstLine.includes('học sinh') || firstLine.includes('giới tính') || firstLine.includes('stt') || firstLine.includes('tên')) {
           startIndex = 1;
         }
 
-        const parsedList: any[] = [];
-        for (let i = startIndex; i < lines.length; i++) {
+        // The first data line represents the Teacher (GVCN)
+        const teacherLine = lines[startIndex];
+        let teacherCols = teacherLine.split(',');
+        if (teacherCols.length < 2) teacherCols = teacherLine.split(';');
+        if (teacherCols.length < 2) teacherCols = teacherLine.split('\t');
+
+        const gvcnName = teacherCols[1] ? teacherCols[1].trim() : 'Cô giáo Mai Anh';
+
+        const parsedStudents: any[] = [];
+        for (let i = startIndex + 1; i < lines.length; i++) {
           const line = lines[i];
           let cols = line.split(',');
-          if (cols.length < 3) cols = line.split(';');
-          if (cols.length < 3) cols = line.split('\t');
+          if (cols.length < 2) cols = line.split(';');
+          if (cols.length < 2) cols = line.split('\t');
 
           if (cols.length < 2) continue;
 
@@ -715,75 +734,51 @@ export const TeacherView: React.FC = () => {
           const gender = cols[2] ? cols[2].trim() : 'Nam';
           const parentName = cols[3] ? cols[3].trim() : '';
           const parentPhone = cols[4] ? cols[4].trim() : '';
-          const gvcnCol = cols[5] ? cols[5].trim().toLowerCase() : 'không';
-          const hsCol = cols[6] ? cols[6].trim().toLowerCase() : 'có';
 
           if (!name) continue;
 
-          const isGVCN = i === startIndex;
-          const isHS = i > startIndex;
-
-          parsedList.push({
+          parsedStudents.push({
             stt,
             name,
             gender: gender.toLowerCase().includes('nữ') ? 'Nữ' : 'Nam',
             parentName: parentName || `Phụ huynh em ${name}`,
-            parentPhone: parentPhone,
-            isTeacherClass: isGVCN,
-            isStudentSelect: isHS
+            parentPhone: parentPhone || 'Chưa cung cấp',
           });
         }
 
-        if (parsedList.length === 0) {
+        if (parsedStudents.length === 0) {
           alert('Không thể phân tích dữ liệu học sinh nào từ tệp tin! Vui lòng kiểm tra lại định dạng tệp mẫu.');
           return;
         }
 
-        const errors: string[] = [];
-        parsedList.forEach((stu, idx) => {
-          const rowNum = stu.stt || (idx + 1);
-          if (!stu.name.trim()) {
-            errors.push(`Hàng ${rowNum}: Tên học sinh không được để trống.`);
-          }
-        });
-
-        if (errors.length > 0) {
-          alert(`Phát hiện lỗi định dạng dữ liệu:\n${errors.join('\n')}`);
-          return;
-        }
-
-        // Convert and save valid students to replace the entire existing list (isActive: true)
-        const listToImport = parsedList.map((stu, index) => {
+        const listToImport = parsedStudents.map((stu, index) => {
           const codeNum = index + 1;
           const studentCode = `HS${codeNum.toString().padStart(3, '0')}`;
 
           return {
-            id: `stu_${Date.now()}_${index}`,
+            id: `stu_import_${Date.now()}_${index}`,
             name: stu.name,
-            parentName: stu.parentName,
-            parentPhone: stu.parentPhone || 'Chưa cung cấp',
-            birthDate: '2015-01-01',
             gender: stu.gender,
+            parentName: stu.parentName,
+            parentPhone: stu.parentPhone,
+            birthDate: '2018-01-01',
             avatar: stu.gender === 'Nữ'
               ? ['👧', '🦄', '🐼', '🦊', '🐨'][Math.floor(Math.random() * 5)]
               : ['👦', '🦁', '🦖', '🐼', '🦊'][Math.floor(Math.random() * 5)],
             studentCode,
-            isActive: true, // Auto-activated as part of updating/replacing list
-            isTeacherClass: stu.isTeacherClass,
-            isStudentSelect: stu.isStudentSelect,
+            isActive: true, // Auto-activated
             stars: 0,
             flags: 0,
             goldCards: 0,
+            password: '123456',
+            parentPassword: '123456',
             rank: 0
           };
         });
 
-        if (listToImport.length > 0) {
-          setStudents(recalculateRanks(listToImport));
-          alert("Danh sách đã được cập nhật từ file vừa tải lên.");
-        } else {
-          alert('Không có học sinh hợp lệ nào được tải lên!');
-        }
+        setPendingTeacherName(gvcnName);
+        setPendingImportedStudents(listToImport);
+        alert(`Tải file lên thành công!\n- GVCN nhận diện: ${gvcnName}\n- Sĩ số nhận diện: ${listToImport.length} học sinh.\nThầy/Cô vui lòng nhấn nút "LƯU VÀO HỆ THỐNG" để đồng bộ dữ liệu.`);
       } catch (err) {
         console.error(err);
         alert('Lỗi khi đọc file! Vui lòng thử lại với định dạng CSV/Excel hợp lệ.');
@@ -791,6 +786,28 @@ export const TeacherView: React.FC = () => {
     };
     reader.readAsText(file, "UTF-8");
     e.target.value = '';
+  };
+
+  const handleSavePendingImport = () => {
+    if (!pendingImportedStudents || pendingImportedStudents.length === 0) return;
+    audioSynth.playSuccess();
+
+    // 1. Update Teacher Name in LocalStorage
+    localStorage.setItem('lms_teacher_name', pendingTeacherName);
+
+    // 2. Update currentUser if teacher is logged in
+    if (currentUser && currentUser.role === 'teacher') {
+      setCurrentUser(prev => ({ ...prev, name: pendingTeacherName }));
+    }
+
+    // 3. Save students list
+    setStudents(recalculateRanks(pendingImportedStudents));
+
+    // 4. Clear pending
+    setPendingImportedStudents(null);
+    setPendingTeacherName('');
+
+    alert(`🎉 Đã lưu thành công dữ liệu vào cơ sở dữ liệu hệ thống!\n- Giáo viên chủ nhiệm mới: ${pendingTeacherName}\n- Danh sách lớp hiện tại tự động cập nhật: ${pendingImportedStudents.length} học sinh.\n- Thông tin giáo viên và học sinh trên giao diện thay đổi ngay lập tức!`);
   };
 
   const handleConfirmUpload = () => {
@@ -902,7 +919,7 @@ export const TeacherView: React.FC = () => {
       sendZaloNotification(
         s.parentName,
         s.parentPhone,
-        `Chào anh/chị ${s.parentName}. Tài khoản Lớp Học Vui Vẻ của học sinh ${s.name} đã kích hoạt! Đăng nhập Học sinh: SĐT/Mã ${s.studentCode} (mật khẩu: 123456). Đăng nhập Phụ huynh: SĐT ${s.parentPhone} (mật khẩu: 123456).`,
+        `Chào anh/chị ${s.parentName}. Tài khoản ADHE Class của học sinh ${s.name} đã kích hoạt! Đăng nhập Học sinh: SĐT/Mã ${s.studentCode} (mật khẩu: 123456). Đăng nhập Phụ huynh: SĐT ${s.parentPhone} (mật khẩu: 123456).`,
         'teacher_alert'
       );
     });
@@ -1972,9 +1989,9 @@ export const TeacherView: React.FC = () => {
               <span>⬅ QUAY LẠI</span>
             </button>
             <h2 className="text-lg md:text-xl font-black text-indigo-950 uppercase tracking-tight">
-              {activeTab === 'students' && 'Quản lý lớp học 👨🏫'}
+              {activeTab === 'students' && 'Quản lý lớp học 👨‍🏫'}
               {activeTab === 'assignments' && 'Nhiệm vụ học tập 📚'}
-              {activeTab === 'progress' && 'Tiến độ và kết quả 📈'}
+              {activeTab === 'progress' && 'BÁO CÁO & THỐNG KÊ 📊'}
               {activeTab === 'feedback' && 'Phản hồi phụ huynh 💬'}
               {activeTab === 'settings' && 'Cài đặt lớp học ⚙️'}
             </h2>
@@ -1992,7 +2009,7 @@ export const TeacherView: React.FC = () => {
 
       {/* Main Tab Area */}
       <AnimatePresence mode="wait">
-        
+
         {/* TAB 0: DASHBOARD BENTO GRID */}
         {activeTab === 'dashboard' && (
           <motion.div
@@ -2002,150 +2019,124 @@ export const TeacherView: React.FC = () => {
             exit={{ opacity: 0, y: -15 }}
             className="flex flex-col items-center justify-center space-y-8 max-w-4xl mx-auto py-6"
           >
-            <div className="text-center space-y-3">
-              <h3 className="text-2xl md:text-3xl font-black text-indigo-950 uppercase tracking-tight flex items-center justify-center gap-2">
-                <span>🎒</span> QUẢN LÝ LỚP HỌC 🏫
-              </h3>
-              <p className="text-xs md:text-sm text-slate-500 font-bold max-w-lg mx-auto leading-relaxed">
-                Chào mừng Thầy Cô, Học Sinh và Phụ Huynh đến với Trang Quản Lý Lớp Học thông minh. 
-                Vui lòng chọn các tính năng trung tâm dưới đây.
+            {/* System Title Banner */}
+            <div className="text-center space-y-1 animate-fadeIn">
+              <span className="text-3xl">🎒</span>
+              <h2 className="text-2xl font-black text-indigo-950 tracking-tight">
+                ADHE Class
+              </h2>
+              <p className="text-xs text-indigo-600 font-extrabold tracking-wider uppercase">
+                LỚP HỌC TIỆN ÍCH
               </p>
             </div>
 
-            {/* Layout Grid conforming exactly to the requested layout:
-                1. QUẢN LÝ LỚP HỌC - 100% width, Xanh dương & Vàng nhạt.
-                2. NHIỆM VỤ HỌC TẬP - 100% width, Xanh lá & Cam nhạt.
-                3. TIẾN ĐỘ & PHẢN HỒI - 50%/50% width columns, Cam pastel / Tím pastel.
-                4. CÀI ĐẶT LỚP HỌC - 70% width, Xám xanh nhạt.
-            */}
-            <div className="w-full space-y-6">
+            {/* Layout Grid: 2 columns on mobile, uniform size, cute cartoon style, rounded 20-24px */}
+            <div className="w-full grid grid-cols-2 md:grid-cols-3 gap-6">
               
-              {/* 1. QUẢN LÝ LỚP HỌC (100% size, Blue with soft gold border) */}
+              {/* Card 1: QUẢN LÝ LỚP HỌC */}
               <button
                 type="button"
                 onClick={() => {
                   audioSynth.playSuccess();
                   setActiveTab('students');
                 }}
-                className="w-full text-left bg-gradient-to-br from-sky-500 to-blue-600 text-white hover:from-sky-600 hover:to-blue-700 p-8 rounded-3xl border-4 border-amber-200 hover:border-amber-400 shadow-sm hover:shadow-xl transition-all cursor-pointer transform hover:-translate-y-1 relative overflow-hidden group flex flex-col justify-between min-h-[180px]"
+                style={{ backgroundColor: '#F5F9FF' }}
+                className="p-6 rounded-[24px] border-2 border-blue-150 shadow-xs hover:shadow-md transition-all cursor-pointer transform hover:-translate-y-1 flex flex-col items-center justify-between text-center space-y-4 min-h-[200px] active:scale-95"
               >
-                <div className="absolute top-4 right-4 bg-amber-200 text-sky-950 text-[10px] font-black px-3 py-1 rounded-full uppercase border border-white tracking-wider shadow-xs">
-                  Quan trọng nhất ★
+                <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-3xl shadow-inner select-none">
+                  🎒
                 </div>
-                <div>
-                  <h4 className="text-2xl md:text-3xl font-extrabold uppercase tracking-wide text-white select-none">
-                    QUẢN LÝ LỚP HỌC
-                  </h4>
-                  <p className="text-xs md:text-sm text-sky-50 font-bold mt-2 max-w-2xl leading-relaxed">
-                    Sổ điểm danh hàng ngày, danh sách học sinh, quản lý nề nếp kỷ luật & vinh danh bảng vàng tích sao quy đổi thẻ điểm thưởng lấp lánh.
-                  </p>
-                </div>
-                <div className="text-6xl self-center mt-3 group-hover:scale-125 transition-transform duration-300 select-none">
-                  👨🏫
-                </div>
+                <h3 className="text-sm font-black text-blue-950 uppercase tracking-tight select-none">
+                  QUẢN LÝ LỚP HỌC
+                </h3>
+                <span className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-black text-[10px] uppercase rounded-xl tracking-wider transition-all select-none">
+                  BẤM ĐỂ TRUY CẬP
+                </span>
               </button>
 
-              {/* 2. NHIỆM VỤ HỌC TẬP (100% size, Green with orange touch) */}
+              {/* Card 2: HỌC TẬP & NHIỆM VỤ */}
               <button
                 type="button"
                 onClick={() => {
                   audioSynth.playSuccess();
                   setActiveTab('assignments');
                 }}
-                className="w-full text-left bg-gradient-to-br from-emerald-500 to-green-600 text-white hover:from-emerald-600 hover:to-green-700 p-8 rounded-3xl border-4 border-orange-200 hover:border-orange-400 shadow-sm hover:shadow-xl transition-all cursor-pointer transform hover:-translate-y-1 relative overflow-hidden group flex flex-col justify-between min-h-[180px]"
+                style={{ backgroundColor: '#EAF7F2' }}
+                className="p-6 rounded-[24px] border-2 border-emerald-150 shadow-xs hover:shadow-md transition-all cursor-pointer transform hover:-translate-y-1 flex flex-col items-center justify-between text-center space-y-4 min-h-[200px] active:scale-95"
               >
-                <div className="absolute top-4 right-4 bg-orange-200 text-emerald-950 text-[10px] font-black px-3 py-1 rounded-full uppercase border border-white tracking-wider shadow-xs">
-                  Học tập & Tương tác ★
-                </div>
-                <div>
-                  <h4 className="text-2xl md:text-3xl font-extrabold uppercase tracking-wide text-white select-none">
-                    NHIỆM VỤ HỌC TẬP
-                  </h4>
-                  <p className="text-xs md:text-sm text-emerald-50 font-bold mt-2 max-w-2xl leading-relaxed">
-                    Hệ thống soạn đề trắc nghiệm thông minh, gửi bài tự luận chữ đẹp, bài thực tế trải nghiệm và đồng bộ hóa kết quả tức thì.
-                  </p>
-                </div>
-                <div className="text-6xl self-center mt-3 group-hover:scale-125 transition-transform duration-300 select-none">
+                <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center text-3xl shadow-inner select-none">
                   📚
                 </div>
+                <h3 className="text-sm font-black text-emerald-950 uppercase tracking-tight select-none">
+                  HỌC TẬP & NHIỆM VỤ
+                </h3>
+                <span className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-[10px] uppercase rounded-xl tracking-wider transition-all select-none">
+                  BẤM ĐỂ TRUY CẬP
+                </span>
               </button>
 
-              {/* 3. TIẾN ĐỘ & PHẢN HỒI (50% each side by side) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
-                
-                {/* TIẾN ĐỘ VÀ KẾT QUẢ (Cam pastel) */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    audioSynth.playSuccess();
-                    setActiveTab('assignments');
-                    setAssignmentSubTab('progress');
-                  }}
-                  className="text-left bg-gradient-to-br from-orange-50 to-orange-100 border-2 border-orange-200 hover:from-orange-100 hover:to-orange-200 p-7 rounded-3xl shadow-sm hover:shadow-lg transition-all cursor-pointer transform hover:-translate-y-1 relative overflow-hidden group flex flex-col justify-between min-h-[160px]"
-                >
-                  <div>
-                    <h4 className="text-lg md:text-xl font-extrabold uppercase tracking-wide text-orange-950 select-none">
-                      TIẾN ĐỘ KẾT QUẢ
-                    </h4>
-                    <p className="text-xs text-orange-850 font-bold mt-1.5 leading-relaxed">
-                      Biểu đồ thống kê tự động tỷ lệ nộp bài, xếp hạng thi đua tuần/tháng & bảng điểm tổng hợp các môn.
-                    </p>
-                  </div>
-                  <div className="text-5xl self-center mt-2 group-hover:scale-110 transition-transform duration-300 select-none">
-                    📈
-                  </div>
-                </button>
+              {/* Card 3: BÁO CÁO & THỐNG KÊ */}
+              <button
+                type="button"
+                onClick={() => {
+                  audioSynth.playSuccess();
+                  setActiveTab('progress');
+                }}
+                style={{ backgroundColor: '#FFF8E7' }}
+                className="p-6 rounded-[24px] border-2 border-amber-150 shadow-xs hover:shadow-md transition-all cursor-pointer transform hover:-translate-y-1 flex flex-col items-center justify-between text-center space-y-4 min-h-[200px] active:scale-95"
+              >
+                <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center text-3xl shadow-inner select-none">
+                  📊
+                </div>
+                <h3 className="text-sm font-black text-amber-950 uppercase tracking-tight select-none">
+                  BÁO CÁO & THỐNG KÊ
+                </h3>
+                <span className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-black text-[10px] uppercase rounded-xl tracking-wider transition-all select-none">
+                  BẤM ĐỂ TRUY CẬP
+                </span>
+              </button>
 
-                {/* PHẢN HỒI PHỤ HUYNH (Tím pastel) */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    audioSynth.playSuccess();
-                    setActiveTab('feedback');
-                  }}
-                  className="text-left bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-200 hover:from-purple-100 hover:to-purple-200 p-7 rounded-3xl shadow-sm hover:shadow-lg transition-all cursor-pointer transform hover:-translate-y-1 relative overflow-hidden group flex flex-col justify-between min-h-[160px]"
-                >
-                  <div>
-                    <h4 className="text-lg md:text-xl font-extrabold uppercase tracking-wide text-purple-950 select-none">
-                      PHẢN HỒI PHỤ HUYNH
-                    </h4>
-                    <p className="text-xs text-purple-850 font-bold mt-1.5 leading-relaxed">
-                      Kênh trao đổi ý kiến góp ý, đồng bộ nhắc nhở con học tập nỗ lực và thưởng sao rèn luyện.
-                    </p>
-                  </div>
-                  <div className="text-5xl self-center mt-2 group-hover:scale-110 transition-transform duration-300 select-none">
-                    💬
-                  </div>
-                </button>
+              {/* Card 4: KẾT NỐI PHỤ HUYNH */}
+              <button
+                type="button"
+                onClick={() => {
+                  audioSynth.playSuccess();
+                  setActiveTab('feedback');
+                }}
+                style={{ backgroundColor: '#F3EEFF' }}
+                className="p-6 rounded-[24px] border-2 border-purple-150 shadow-xs hover:shadow-md transition-all cursor-pointer transform hover:-translate-y-1 flex flex-col items-center justify-between text-center space-y-4 min-h-[200px] active:scale-95"
+              >
+                <div className="w-16 h-16 rounded-full bg-purple-100 flex items-center justify-center text-3xl shadow-inner select-none">
+                  👨‍👩‍👧
+                </div>
+                <h3 className="text-sm font-black text-purple-950 uppercase tracking-tight select-none">
+                  KẾT NỐI PHỤ HUYNH
+                </h3>
+                <span className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white font-black text-[10px] uppercase rounded-xl tracking-wider transition-all select-none">
+                  BẤM ĐỂ TRUY CẬP
+                </span>
+              </button>
 
-              </div>
-
-              {/* 4. CÀI ĐẶT LỚP HỌC (70% width centered, Xám xanh nhạt) */}
-              <div className="w-full flex justify-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    audioSynth.playSuccess();
-                    setActiveTab('settings');
-                  }}
-                  className="w-full md:w-[70%] text-left bg-gradient-to-r from-slate-50 to-slate-100 hover:from-slate-100 hover:to-slate-200 border-2 border-slate-300 p-6 rounded-2xl shadow-xs hover:shadow-md transition-all cursor-pointer transform hover:-translate-y-0.5 relative overflow-hidden group flex items-center justify-between min-h-[90px]"
-                >
-                  <div className="flex items-center space-x-4">
-                    <div className="text-4xl group-hover:rotate-45 transition-transform duration-300 select-none">
-                      ⚙️
-                    </div>
-                    <div>
-                      <h4 className="text-sm md:text-base font-extrabold uppercase tracking-wide text-slate-900 select-none">
-                        CÀI ĐẶT LỚP HỌC
-                      </h4>
-                      <p className="text-xs text-slate-600 font-bold mt-0.5">
-                        Thiết lập quy tắc thi đua đổi sao lấy cờ, danh sách lỗi vi phạm & cấu hình hình ảnh bảng tin lớp.
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-xl text-slate-400 font-black shrink-0 mr-1 group-hover:translate-x-1.5 transition-transform">➔</span>
-                </button>
-              </div>
+              {/* Card 5: CÀI ĐẶT HỆ THỐNG */}
+              <button
+                type="button"
+                onClick={() => {
+                  audioSynth.playSuccess();
+                  setActiveTab('settings');
+                }}
+                style={{ backgroundColor: '#FFF0F5' }}
+                className="p-6 rounded-[24px] border-2 border-pink-150 shadow-xs hover:shadow-md transition-all cursor-pointer transform hover:-translate-y-1 flex flex-col items-center justify-between text-center space-y-4 min-h-[200px] col-span-2 md:col-span-1 active:scale-95 mx-auto w-full"
+              >
+                <div className="w-16 h-16 rounded-full bg-pink-100 flex items-center justify-center text-3xl shadow-inner select-none">
+                  ⚙️
+                </div>
+                <h3 className="text-sm font-black text-pink-950 uppercase tracking-tight select-none">
+                  CÀI ĐẶT HỆ THỐNG
+                </h3>
+                <span className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white font-black text-[10px] uppercase rounded-xl tracking-wider transition-all select-none">
+                  BẤM ĐỂ TRUY CẬP
+                </span>
+              </button>
 
             </div>
           </motion.div>
@@ -2691,67 +2682,54 @@ export const TeacherView: React.FC = () => {
                 </AnimatePresence>
 
                 {/* DEDICATED BOTTOM ACTIONS FOOTER FOR FILE TEMPLATE AND UPLOAD */}
-                <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 border-4 border-indigo-500 shadow-xl space-y-4 mt-6 relative overflow-hidden animate-fadeIn">
-                  <div className="absolute top-0 right-0 text-6xl opacity-10 select-none pointer-events-none mt-1 mr-2">📥📤✨</div>
-                  <div className="text-left border-b border-white/10 pb-3">
-                    <h3 className="text-base font-black text-indigo-200 flex items-center space-x-2">
-                      <span>⚙️ TIỆN ÍCH QUẢN LÝ TỆP TIN DANH SÁCH LỚP HỌC</span>
+                <div className="bg-white/90 rounded-[24px] p-6 border-4 border-indigo-150 shadow-md space-y-4 mt-6 relative overflow-hidden animate-fadeIn">
+                  <div className="text-center border-b pb-3 border-indigo-50">
+                    <h3 className="text-sm font-black text-indigo-950 uppercase tracking-wider">
+                      ⚙️ TIỆN ÍCH QUẢN LÝ TỆP TIN DANH SÁCH LỚP HỌC
                     </h3>
-                    <p className="text-xs text-indigo-300 font-bold mt-1">
-                      Thực hiện quy trình tải tệp biểu mẫu tiêu chuẩn và nhập hàng loạt danh sách học sinh lên hệ thống nhanh chóng.
-                    </p>
                   </div>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Left Button */}
-                    <div className="bg-white/5 border border-white/10 p-4 rounded-2xl hover:bg-white/10 transition-all flex flex-col justify-between space-y-3">
-                      <div>
-                        <h4 className="text-xs font-black text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                          <Download className="h-4 w-4 shrink-0" />
-                          <span>Bước 1: Tải file mẫu danh sách</span>
-                        </h4>
-                        <p className="text-[11px] text-slate-300 font-medium leading-relaxed mt-1">
-                          Giúp giáo viên tải xuống biểu mẫu chuẩn để nhập thông tin học sinh theo đúng định dạng của hệ thống.
-                        </p>
-                      </div>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full">
+                    {/* Button 1: TẢI FILE MẪU */}
+                    <button
+                      type="button"
+                      onClick={handleDownloadTemplate}
+                      className="w-full sm:w-auto px-6 py-3 bg-amber-400 hover:bg-amber-500 text-amber-950 rounded-2xl text-xs font-black shadow-sm transition-all uppercase tracking-wider active:scale-95 cursor-pointer flex items-center justify-center space-x-1"
+                    >
+                      <span>📥 TẢI FILE MẪU</span>
+                    </button>
+
+                    {/* Button 2: TẢI DANH SÁCH LÊN */}
+                    <label 
+                      className="w-full sm:w-auto px-6 py-3 bg-purple-400 hover:bg-purple-500 text-white rounded-2xl text-xs font-black shadow-sm transition-all text-center uppercase tracking-wider active:scale-95 cursor-pointer flex items-center justify-center space-x-1"
+                    >
+                      <span>📤 TẢI DANH SÁCH LÊN</span>
+                      <input
+                        type="file"
+                        accept=".csv,.txt"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                    </label>
+
+                    {/* Button 3: LƯU VÀO CƠ SỞ DỮ LIỆU */}
+                    {pendingImportedStudents ? (
                       <button
                         type="button"
-                        onClick={handleDownloadTemplate}
-                        className="w-full flex items-center justify-center space-x-1.5 py-3 px-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black cursor-pointer shadow-md transition-all uppercase tracking-wider active:scale-95"
+                        onClick={handleSavePendingImport}
+                        className="w-full sm:w-auto px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-sm cursor-pointer flex items-center justify-center space-x-1.5 animate-bounce"
                       >
-                        <Download className="h-4 w-4 animate-pulse shrink-0" />
-                        <span>Tải file mẫu danh sách 📥</span>
+                        <span>💾 LƯU VÀO CƠ SỞ DỮ LIỆU ({pendingImportedStudents.length} HS)</span>
                       </button>
-                    </div>
-
-                    {/* Right Button */}
-                    <div className="bg-white/5 border border-white/10 p-4 rounded-2xl hover:bg-white/10 transition-all flex flex-col justify-between space-y-3">
-                      <div>
-                        <h4 className="text-xs font-black text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
-                          <Upload className="h-4 w-4 shrink-0" />
-                          <span>Bước 2: Đưa file mẫu lên</span>
-                        </h4>
-                        <p className="text-[11px] text-slate-300 font-medium leading-relaxed mt-1">
-                          Cho phép giáo viên tải tệp danh sách đã hoàn thiện lên hệ thống. Sau khi tải thành công, dữ liệu sẽ được tự động lưu vào cơ sở dữ liệu và cập nhật danh sách học sinh của lớp.
-                        </p>
-                      </div>
-                      <label 
-                        className="w-full flex items-center justify-center space-x-1.5 py-3 px-4 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-xs font-black cursor-pointer shadow-md transition-all text-center uppercase tracking-wider active:scale-95"
+                    ) : (
+                      <button
+                        type="button"
+                        disabled
+                        className="w-full sm:w-auto px-6 py-3 bg-slate-200 text-slate-400 rounded-2xl text-xs font-bold cursor-not-allowed uppercase flex items-center justify-center space-x-1.5"
                       >
-                        <Upload className="h-4 w-4 shrink-0 animate-bounce" />
-                        <span>Đưa file mẫu lên 📤</span>
-                        <input
-                          type="file"
-                          accept=".csv,.txt"
-                          onChange={handleFileUpload}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-indigo-950/80 p-3.5 rounded-xl border border-indigo-800/60 text-[11px] text-indigo-200 font-bold leading-relaxed">
-                    💡 <strong>Cấu trúc file mẫu danh sách:</strong> Cấu trúc file mẫu được quy định như sau: dòng đầu tiên mặc định là thông tin Giáo viên, từ dòng thứ hai trở đi là danh sách Học sinh. Hệ thống sẽ tự động nhận diện và phân loại dữ liệu theo cấu trúc này khi nhập danh sách vào cơ sở dữ liệu. Việc bố trí hai nút chức năng này giúp giáo viên dễ dàng thực hiện quy trình tải mẫu, nhập dữ liệu và đồng bộ danh sách học sinh một cách nhanh chóng, thuận tiện và chính xác.
+                        <span>💾 LƯU VÀO CƠ SỞ DỮ LIỆU</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -4675,215 +4653,94 @@ export const TeacherView: React.FC = () => {
                     </div>
 
                     {/* DEDICATED SECTION: CẤU HÌNH THAM SỐ SOẠN BÀI */}
-                    <div className="border border-purple-200 rounded-3xl p-4 bg-purple-50/15 space-y-4">
+                    <div className="border border-purple-200 rounded-3xl p-5 bg-purple-50/15 space-y-5">
                       <div className="border-b border-purple-100 pb-2.5">
                         <h4 className="font-black text-xs text-purple-900 uppercase tracking-wider font-sans">
                           ⚙️ Cấu hình tham số soạn bài
                         </h4>
                         <p className="text-[10px] text-slate-400 font-bold italic">
-                          Hỗ trợ thiết lập nội dung & đồng bộ hình ảnh để AI sinh học liệu chuẩn.
+                          Nhập chủ đề và dán giáo án của Thầy/Cô để trợ lý AI tự động biên soạn đề ôn luyện bám sát nhất.
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                        {/* Left part: Topic and summary text (7 cols) */}
-                        <div className="md:col-span-7 space-y-3.5">
-                          <div>
-                            <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
-                              Chủ đề kiểm tra / ôn tập
-                            </label>
-                            <input
-                              type="text"
-                              value={aiTopic}
-                              onChange={e => setAiTopic(e.target.value)}
-                              placeholder="Nhập tên chủ đề ôn luyện (ví dụ: Bảng nhân 8, Từ chỉ đặc điểm...)"
-                              className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white font-bold text-slate-700 focus:outline-none focus:border-purple-400"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
-                              Dán giáo án / Nội dung tóm tắt
-                            </label>
-                            <textarea
-                              value={aiLessonContent}
-                              onChange={e => setAiLessonContent(e.target.value)}
-                              rows={5}
-                              placeholder="Sao chép & dán giáo án, tài liệu tóm tắt kiến thức SGK để AI bám sát..."
-                              className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white font-bold text-slate-700 focus:outline-none focus:border-purple-400 font-sans"
-                            />
-                          </div>
+                      <div className="space-y-4">
+                        {/* Row 1: Chủ đề kiểm tra / ôn tập */}
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] font-black text-slate-500 uppercase">
+                            Chủ đề kiểm tra / ôn tập
+                          </label>
+                          <input
+                            type="text"
+                            value={aiTopic}
+                            onChange={e => setAiTopic(e.target.value)}
+                            placeholder="Nhập tên chủ đề ôn luyện (ví dụ: Bảng nhân 8, Từ chỉ đặc điểm...)"
+                            className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white font-bold text-slate-700 focus:outline-none focus:border-purple-400"
+                          />
                         </div>
 
-                        {/* Right part: + Thêm hình ảnh and details (5 cols) */}
-                        <div className="md:col-span-5 flex flex-col justify-between">
-                          <div className="space-y-2 h-full flex flex-col justify-between">
-                            <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 text-center">
-                              📸 Tài liệu đính kèm
-                            </label>
-
-                            {/* Dropzone representing the "+ Thêm hình ảnh" button and logic */}
-                            <div className="border-2 border-dashed border-purple-300 rounded-2xl p-3 text-center bg-white hover:bg-purple-50/20 transition-all relative group cursor-pointer flex-1 flex flex-col items-center justify-center min-h-[160px]">
-                              <input
-                                type="file"
-                                accept="image/*,.pdf,.doc,.docx"
-                                onChange={handleImageUpload}
-                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                              />
-                              <div className="space-y-1">
-                                <div className="text-purple-700 font-extrabold text-[12px]">
-                                  + Thêm hình ảnh 🖼️
-                                </div>
-                                <div className="space-y-1 text-slate-500 text-[9px] font-bold text-left bg-slate-50/50 p-2 rounded-lg leading-snug">
-                                  <div>• Chọn hình ảnh từ <strong>máy tính</strong>.</div>
-                                  <div>• Chọn hình ảnh từ <strong>điện thoại</strong>.</div>
-                                  <div>• Tải lên ảnh chụp <strong>sách giáo khoa, bài giảng, sơ đồ, biểu đồ</strong> hoặc tài liệu học tập.</div>
-                                  <div className="text-purple-600 font-extrabold">• Liên kết & đồng bộ dữ liệu hình ảnh với nội dung nhập để AI phân tích chính xác nhất.</div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
+                        {/* Row 2: Dán giáo án / Nội dung tóm tắt */}
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] font-black text-slate-500 uppercase">
+                            Dán giáo án / Nội dung tóm tắt
+                          </label>
+                          <textarea
+                            value={aiLessonContent}
+                            onChange={e => setAiLessonContent(e.target.value)}
+                            rows={4}
+                            placeholder="Sao chép & dán giáo án, tài liệu tóm tắt kiến thức SGK để AI bám sát..."
+                            className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white font-bold text-slate-700 focus:outline-none focus:border-purple-400 font-sans"
+                          />
                         </div>
-                      </div>
 
-                      {/* Summary explanation sentence of AI analysis requested */}
-                      <div className="bg-purple-50 text-purple-900 rounded-xl p-3 text-[10.5px] leading-relaxed font-bold border border-purple-100">
-                        💡 <strong>Quy trình phân tích:</strong> Sau khi giáo viên nhập nội dung và đính kèm hình ảnh, hệ thống AI sẽ tự động phân tích dữ liệu, nhận diện nội dung bài học và hỗ trợ tạo câu hỏi, bài tập, đề kiểm tra hoặc nội dung ôn tập phù hợp với mục tiêu giảng dạy.
-                      </div>
-                    </div>
-
-                    {/* Sample questions */}
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Câu hỏi mẫu (Sáng tạo câu hỏi tương tự)</label>
-                      <textarea
-                        value={aiSampleQuestions}
-                        onChange={e => setAiSampleQuestions(e.target.value)}
-                        rows={2}
-                        placeholder="Nhập câu hỏi mẫu nếu thầy cô muốn AI sáng tạo cấu trúc tương tự..."
-                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50/50 font-bold text-slate-700 focus:outline-none focus:border-purple-400"
-                      />
-                    </div>
-
-                    {/* Resource link URL */}
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">🔗 Liên kết đến nguồn tài liệu</label>
-                      <input
-                        type="url"
-                        value={aiResourceLink}
-                        onChange={e => setAiResourceLink(e.target.value)}
-                        placeholder="Dán đường dẫn từ nguồn học liệu trực tuyến, trang web tham khảo..."
-                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50/50 font-bold text-slate-700 focus:outline-none focus:border-purple-400"
-                      />
-                    </div>
-
-                    {/* Upload status if any files uploaded */}
-                    {aiUploadedImages.length > 0 && (
-                      <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl p-2.5 text-xs font-bold flex items-center justify-between">
-                        <div className="flex items-center space-x-1.5">
-                          <span className="text-emerald-600 animate-pulse">✓</span>
-                          <span>Đã tải lên {aiUploadedImages.length} tài liệu học liệu thành công!</span>
+                        {/* Row 3: Lời dặn thêm cho AI Trợ lý */}
+                        <div>
+                          <label className="block text-[10px] font-black text-purple-700 uppercase mb-1">Lời dặn thêm cho AI Trợ lý</label>
+                          <input
+                            type="text"
+                            value={aiPrompt}
+                            onChange={e => setAiPrompt(e.target.value)}
+                            placeholder="Ví dụ: Thiết kế câu hỏi vui nhộn, lồng ghép nhân vật cổ tích..."
+                            className="w-full text-xs p-2.5 rounded-xl border border-purple-200 bg-purple-50/20 font-bold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-purple-500"
+                          />
                         </div>
+
+                        {/* Submit / Generate action */}
                         <button
-                          onClick={() => {
-                            audioSynth.playBubblePop();
-                            setAiUploadedImages([]);
-                          }}
-                          className="text-[10px] font-black text-rose-600 hover:underline uppercase"
+                          onClick={handleAIGenerate}
+                          disabled={aiIsGenerating}
+                          className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl transition shadow-lg shadow-indigo-500/20 cursor-pointer flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
                         >
-                          Xóa hết
+                          <span>{aiIsGenerating ? '🤖 ĐANG SOẠN ĐỀ...' : '🤖 CHẠY AI TRỢ LÝ SOẠN BÀI'}</span>
                         </button>
                       </div>
-                    )}
 
-                    {/* Mock shortcuts for rapid selection */}
-                    <div className="space-y-1.5">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Chọn nhanh tệp mẫu có sẵn:</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            audioSynth.playBubblePop();
-                            setAiUploadedImages(['data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=']);
-                            alert('📎 Đã đính kèm ảnh mô phỏng từ máy tính: "Bai_hoc_Hinh_Hoc_Lop_3.png"');
-                          }}
-                          className={`px-2.5 py-1 text-[9px] font-bold rounded-lg border transition ${
-                            aiUploadedImages.length > 0
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                          }`}
-                        >
-                          🖼️ SGK_Toán_3_HinhHoc.png
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            audioSynth.playBubblePop();
-                            setAiLessonContent('Tài liệu học tập chuyên đề ôn tập Tiếng Việt cuối kỳ. Yêu cầu tóm tắt và đặt 5 câu hỏi thông hiểu về đoạn thơ quê hương.');
-                            alert('📎 Đã nạp nội dung tài liệu Word (.docx) thành công!');
-                          }}
-                          className="px-2.5 py-1 text-[9px] font-bold rounded-lg bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition"
-                        >
-                          📄 OnTap_TiengViet3.docx
-                        </button>
+                      {/* Clean description of the AI assistant */}
+                      <div className="bg-purple-100/40 text-purple-950 rounded-2xl p-4 text-[11px] leading-relaxed font-bold border border-purple-200/50 space-y-1">
+                        <div className="text-purple-900 uppercase tracking-wider text-[10px] font-black flex items-center gap-1">
+                          <span>🤖 HỆ THỐNG TRỢ LÝ SOẠN BÀI THÔNG MINH:</span>
+                        </div>
+                        <p className="text-slate-600 font-semibold leading-relaxed">
+                          Hệ thống AI sẽ tự động phân tích chủ đề và dán giáo án của Thầy/Cô để sinh bộ bài tập tương tác, đáp án chuẩn, lời giải chi tiết và bảng tiêu chí hướng dẫn tự luận bám sát nhất chương trình tiểu học.
+                        </p>
                       </div>
                     </div>
-
-                    {/* Detailed Prompt instructions */}
-                    <div>
-                      <label className="block text-[10px] font-black text-purple-700 uppercase mb-1">Lời dặn thêm cho AI Trợ lý</label>
-                      <input
-                        type="text"
-                        value={aiPrompt}
-                        onChange={e => setAiPrompt(e.target.value)}
-                        placeholder="Ví dụ: Thiết kế câu hỏi vui nhộn, lồng ghép nhân vật cổ tích..."
-                        className="w-full text-xs p-2.5 rounded-xl border border-purple-200 bg-purple-50/20 font-bold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-purple-500"
-                      />
-                    </div>
-
-                    {/* Submit / Generate action */}
-                    <button
-                      onClick={handleAIGenerate}
-                      disabled={aiIsGenerating}
-                      className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl transition shadow-lg shadow-indigo-500/20 cursor-pointer flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
-                    >
-                      <span>{aiIsGenerating ? '🤖 ĐANG SOẠN ĐỀ...' : '🤖 CHẠY AI TRỢ LÝ SOẠN BÀI'}</span>
-                    </button>
                   </div>
 
-                  {/* Right output column (6 cols) */}
-                  <div className="lg:col-span-6 space-y-6">
-                    {/* 1. Loading UI */}
-                    {aiIsGenerating && (
-                      <div className="bg-white p-10 rounded-3xl border border-purple-100 shadow-sm flex flex-col items-center justify-center text-center space-y-6 min-h-[400px] animate-pulse">
-                        <div className="relative">
-                          <div className="w-16 h-16 rounded-full border-4 border-purple-100 border-t-purple-600 animate-spin"></div>
-                          <span className="absolute inset-0 flex items-center justify-center text-2xl animate-bounce">🤖</span>
-                        </div>
-                        <div className="space-y-2 max-w-md">
-                          <h4 className="font-black text-slate-800 text-sm uppercase tracking-wide">Trí tuệ nhân tạo đang làm việc</h4>
-                          <p className="text-xs text-slate-400 font-bold italic">"Đang nghiên cứu mục tiêu bài học, xây dựng câu hỏi tương tác, giải thích và tiêu chí chấm chi tiết..."</p>
-                        </div>
-                        {/* Dynamic Step Logs */}
-                        <div className="w-full max-w-sm text-left bg-slate-50 p-4 rounded-2xl border border-slate-150 space-y-2 text-[10px] font-mono font-bold text-slate-600">
-                          <div className="flex items-center space-x-2 text-purple-600">
-                            <span>⚡</span>
-                            <span>[1/4] Đọc dữ liệu đầu vào và phân tích SGK / File đính kèm...</span>
+                    {/* Right output column (6 cols) */}
+                    <div className="lg:col-span-6 space-y-6">
+                      {/* 1. Loading UI */}
+                      {aiIsGenerating && (
+                        <div className="bg-white p-10 rounded-3xl border border-purple-100 shadow-sm flex flex-col items-center justify-center text-center space-y-6 min-h-[400px] animate-pulse">
+                          <div className="relative">
+                            <div className="w-16 h-16 rounded-full border-4 border-purple-100 border-t-purple-600 animate-spin"></div>
+                            <span className="absolute inset-0 flex items-center justify-center text-2xl animate-bounce">🤖</span>
                           </div>
-                          <div className="flex items-center space-x-2 text-indigo-500 animate-pulse">
-                            <span>🔄</span>
-                            <span>[2/4] Gemini soạn danh sách câu hỏi theo mức độ {aiDifficulty}...</span>
-                          </div>
-                          <div className="flex items-center space-x-2 text-slate-400">
-                            <span>⚪</span>
-                            <span>[3/4] Cấu hình lời giải, bảng tiêu chí tự luận chi tiết...</span>
-                          </div>
-                          <div className="flex items-center space-x-2 text-slate-400">
-                            <span>⚪</span>
-                            <span>[4/4] Đóng gói cấu trúc học liệu chuẩn tương thích LMS...</span>
+                          <div className="space-y-2 max-w-md">
+                            <h4 className="font-black text-slate-800 text-sm uppercase tracking-wide">Trí tuệ nhân tạo đang làm việc</h4>
+                            <p className="text-xs text-slate-400 font-bold italic">"Đang nghiên cứu mục tiêu bài học, xây dựng câu hỏi tương tác, giải thích và tiêu chí chấm chi tiết..."</p>
                           </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
                     {/* 2. Generated Exercise View */}
                     {!aiIsGenerating && aiGeneratedExercise && (
@@ -5976,7 +5833,7 @@ export const TeacherView: React.FC = () => {
         )}
 
         {/* TAB 3: STUDENT PROGRESS & QUIZ ANALYTICS (BYPASSED AND INTEGRATED INTO ASSIGNMENTS SUB-TAB) */}
-        {false && activeTab === 'progress' && (
+        {activeTab === 'progress' && (
           <motion.div
             key="progress"
             initial={{ opacity: 0, y: 10 }}
@@ -5984,274 +5841,487 @@ export const TeacherView: React.FC = () => {
             exit={{ opacity: 0, y: -10 }}
             className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm space-y-6"
           >
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+            {/* Header Banner */}
+            <div className="bg-gradient-to-r from-indigo-50 via-sky-50 to-emerald-50/20 p-6 rounded-3xl border border-indigo-100/50 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
               <div>
-                <h3 className="text-lg font-bold text-slate-800">Tiến độ hoàn thành nhiệm vụ & Kết quả</h3>
-                <p className="text-xs text-slate-400 font-medium">Theo dõi chi tiết số lần làm bài, số câu đúng, thời gian làm bài của học sinh theo từng môn học.</p>
+                <h3 className="text-xl font-black text-indigo-950 flex items-center gap-2">
+                  <span>📊</span> HỆ THỐNG BÁO CÁO & THỐNG KÊ THÔNG MINH
+                </h3>
+                <p className="text-xs text-slate-500 font-bold mt-1">
+                  Phân tích học lực, theo dõi tiến độ nộp bài, thống kê mức độ đồng hành học cùng con của Phụ huynh & Tổng hợp đề xuất bằng AI.
+                </p>
               </div>
-              {selectedSubject && (
-                <button
-                  onClick={() => setSelectedSubject(null)}
-                  className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition cursor-pointer shrink-0"
-                >
-                  ← Hiện tất cả 11 môn
-                </button>
-              )}
+              <div className="flex flex-wrap gap-2.5">
+                {selectedSubject && (
+                  <button
+                    onClick={() => {
+                      audioSynth.playBubblePop();
+                      setSelectedSubject(null);
+                    }}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition cursor-pointer shrink-0 uppercase tracking-wider"
+                  >
+                    ← Hiện tất cả 11 môn
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* General Class Analytics Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-4 bg-blue-50/45 border border-blue-100/60 rounded-2xl">
+                <span className="text-2xl">👦👧</span>
+                <div className="mt-2">
+                  <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Sĩ số lớp học</span>
+                  <span className="text-xl font-black text-slate-800">{students.length} Học sinh</span>
+                </div>
+              </div>
+
+              <div className="p-4 bg-emerald-50/45 border border-emerald-100/60 rounded-2xl">
+                <span className="text-2xl">📝</span>
+                <div className="mt-2">
+                  <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Nhiệm vụ đã nộp</span>
+                  <span className="text-xl font-black text-slate-800">{submissions.length} Bài làm</span>
+                </div>
+              </div>
+
+              <div className="p-4 bg-amber-50/45 border border-amber-100/60 rounded-2xl">
+                <span className="text-2xl">🏡</span>
+                <div className="mt-2">
+                  <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">PH đã kiểm tra bài</span>
+                  <span className="text-xl font-black text-slate-800">{Object.keys(parentCheckedAssignments).length} Lượt đồng hành</span>
+                </div>
+              </div>
+
+              <div className="p-4 bg-purple-50/45 border border-purple-100/60 rounded-2xl">
+                <span className="text-2xl">💬</span>
+                <div className="mt-2">
+                  <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Ý kiến phụ huynh</span>
+                  <span className="text-xl font-black text-slate-800">{feedbacks.length} Góp ý trao đổi</span>
+                </div>
+              </div>
             </div>
 
             {/* 11 Rectangular Subject Boxes with 11 different colors */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {SUBJECTS_LIST.map((subj) => {
-                const isSelected = selectedSubject === subj;
-                const colorDef = SUBJECT_COLORS[subj] || { bg: 'bg-slate-50 text-slate-700 border-slate-200', activeBg: 'bg-slate-600 text-white border-slate-600', hover: 'hover:bg-slate-100', icon: '📝' };
-                const subjectAssignments = assignments.filter(a => a.subject === subj);
-                const taskCount = subjectAssignments.length;
+            <div className="space-y-2">
+              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Lọc báo cáo theo môn học:</h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                {SUBJECTS_LIST.map((subj) => {
+                  const isSelected = selectedSubject === subj;
+                  const colorDef = SUBJECT_COLORS[subj] || { bg: 'bg-slate-50 text-slate-700 border-slate-200', activeBg: 'bg-slate-600 text-white border-slate-600', hover: 'hover:bg-slate-100', icon: '📝' };
+                  const subjectAssignments = assignments.filter(a => a.subject === subj && !a.isDraft);
+                  const taskCount = subjectAssignments.length;
 
-                return (
-                  <button
-                    key={subj}
-                    onClick={() => setSelectedSubject(isSelected ? null : subj)}
-                    className={`p-4 md:p-5 rounded-3xl border-2 transition-all duration-300 cursor-pointer flex flex-col items-center justify-center text-center h-36 relative overflow-hidden group select-none shadow-xs hover:shadow-md hover:scale-[1.03] ${
-                      isSelected
-                        ? `${colorDef.activeBg} scale-[1.05] ring-4 ring-offset-2 ring-indigo-400`
-                        : `${colorDef.bg} ${colorDef.hover} border-slate-200/80`
-                    }`}
-                  >
-                    {/* Cute background floating sticker */}
-                    <div className="absolute -right-3 -bottom-3 text-6xl opacity-10 group-hover:scale-125 transition duration-500 select-none pointer-events-none">
-                      {colorDef.icon}
-                    </div>
-
-                    <div className="flex flex-col items-center space-y-3 z-10">
-                      <span className="text-4xl filter drop-shadow-sm transform group-hover:rotate-12 transition-transform duration-300 select-none">
-                        {colorDef.icon}
-                      </span>
-                      <div>
-                        <h4 className="font-black text-xs md:text-sm tracking-tight leading-tight uppercase font-sans">
-                          {subj}
-                        </h4>
-                        <span className={`inline-block text-[9px] px-2.5 py-0.5 rounded-full font-extrabold mt-1.5 uppercase tracking-wider ${
-                          isSelected ? 'bg-white/25 text-white' : 'bg-black/5 text-slate-500'
-                        }`}>
-                          🎈 {taskCount} nhiệm vụ
+                  return (
+                    <button
+                      key={subj}
+                      onClick={() => {
+                        audioSynth.playBubblePop();
+                        setSelectedSubject(isSelected ? null : subj);
+                      }}
+                      className={`p-3 rounded-2xl border-2 transition-all duration-300 cursor-pointer flex flex-col items-center justify-center text-center relative overflow-hidden group select-none shadow-xs hover:shadow-md ${
+                        isSelected
+                          ? `${colorDef.activeBg} scale-[1.03] border-indigo-500 shadow-md`
+                          : `${colorDef.bg} ${colorDef.hover} border-slate-200/80`
+                      }`}
+                    >
+                      <div className="flex flex-col items-center space-y-1 z-10">
+                        <span className="text-2xl transform group-hover:scale-110 transition-transform duration-300">
+                          {colorDef.icon}
                         </span>
+                        <div>
+                          <h4 className="font-black text-[11px] leading-tight uppercase font-sans">
+                            {subj}
+                          </h4>
+                          <span className={`inline-block text-[8px] px-2 py-0.5 rounded-full font-extrabold mt-1 uppercase tracking-wider ${
+                            isSelected ? 'bg-white/25 text-white' : 'bg-black/5 text-slate-500'
+                          }`}>
+                            {taskCount} Nhiệm vụ
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                );
-              })}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* Assignments list based on selected subject */}
-            <div className="space-y-6 pt-2">
+            {/* Assignments List & Detailed Progress Analysis */}
+            <div className="space-y-6 pt-4 border-t border-slate-100">
               {!selectedSubject ? (
-                <div className="text-center py-12 bg-slate-50/50 rounded-3xl border border-dashed border-slate-200 space-y-3">
-                  <span className="text-4xl">👆</span>
-                  <p className="text-slate-500 font-bold text-sm">Vui lòng nhấn vào một trong 11 môn học ở trên</p>
-                  <p className="text-slate-400 text-xs max-w-md mx-auto">Nhấn chọn môn học để xem chi tiết danh sách học sinh đã làm và chưa làm của từng nhiệm vụ tương ứng.</p>
+                <div className="text-center py-14 bg-slate-50/40 rounded-3xl border-2 border-dashed border-slate-200/60 space-y-4">
+                  <span className="text-5xl animate-bounce inline-block">🎯</span>
+                  <div className="space-y-1">
+                    <p className="text-slate-700 font-extrabold text-sm uppercase tracking-wider">Vui lòng chọn môn học để xem báo cáo</p>
+                    <p className="text-slate-400 text-xs max-w-lg mx-auto font-medium">
+                      Hệ thống sẽ tổng hợp tất cả bài tập của môn học đó, phân tích điểm số trung bình, tỷ lệ nộp bài, các lượt đồng hành kiểm tra của phụ huynh và đưa ra báo cáo AI chuyên sâu nhất.
+                    </p>
+                  </div>
                 </div>
               ) : (
                 (() => {
-                  const filteredAssignments = assignments.filter(a => a.subject === selectedSubject);
+                  const filteredAssignments = assignments.filter(a => a.subject === selectedSubject && !a.isDraft);
                   
                   if (filteredAssignments.length === 0) {
                     return (
-                      <div className="text-center py-12 bg-slate-50/50 rounded-3xl border border-dashed border-slate-200 space-y-2">
-                        <span className="text-3xl">📭</span>
+                      <div className="text-center py-12 bg-slate-50/30 rounded-3xl border border-dashed border-slate-200 space-y-2">
+                        <span className="text-4xl">📭</span>
                         <h4 className="font-bold text-slate-700 text-sm">Môn {selectedSubject} chưa có nhiệm vụ nào</h4>
-                        <p className="text-slate-400 text-xs max-w-xs mx-auto">Cô giáo có thể chuyển sang tab <span className="font-bold text-slate-600">"Nhiệm vụ học tập"</span> để giao nhiệm vụ mới cho lớp.</p>
+                        <p className="text-slate-400 text-xs max-w-xs mx-auto">Thầy cô vui lòng chuyển sang chức năng <span className="font-bold text-indigo-600">"Nhiệm vụ học tập"</span> để giao nhiệm vụ mới cho lớp trước.</p>
                       </div>
                     );
                   }
-
-                  const nonDrafts = filteredAssignments.filter(a => !a.isDraft);
-
-                  if (nonDrafts.length === 0) {
-                    return (
-                      <div className="text-center py-12 bg-slate-50/50 rounded-3xl border border-dashed border-slate-200 space-y-2">
-                        <span className="text-3xl">📭</span>
-                        <h4 className="font-bold text-slate-700 text-sm">Môn {selectedSubject} chưa có nhiệm vụ chính thức nào</h4>
-                        <p className="text-slate-400 text-xs max-w-xs mx-auto">Cô giáo có thể chuyển sang tab <span className="font-bold text-slate-600">"Nhiệm vụ học tập"</span> để giao nhiệm vụ mới cho lớp.</p>
-                      </div>
-                    );
-                  }
-
-                  const weeksMap: { [key: number]: Assignment[] } = {};
-                  const unassignedWeek: Assignment[] = [];
-
-                  nonDrafts.forEach(as => {
-                    if (as.week && as.week >= 1 && as.week <= 35) {
-                      if (!weeksMap[as.week]) {
-                        weeksMap[as.week] = [];
-                      }
-                      weeksMap[as.week].push(as);
-                    } else {
-                      unassignedWeek.push(as);
-                    }
-                  });
-
-                  // Sort week numbers
-                  const activeWeeks = Object.keys(weeksMap).map(Number).sort((a, b) => a - b);
-
-                  const renderAssignmentCard = (assignment: Assignment) => {
-                    const doneStudents: { student: Student; sub: typeof submissions[0] }[] = [];
-                    const notDoneStudents: Student[] = [];
-
-                    students.forEach(student => {
-                      const subRecord = submissions.find(
-                        s => s.assignmentId === assignment.id && s.studentId === student.id
-                      );
-                      if (subRecord && subRecord.status === 'submitted') {
-                        doneStudents.push({ student, sub: subRecord });
-                      } else {
-                        notDoneStudents.push(student);
-                      }
-                    });
-
-                    return (
-                      <div key={assignment.id} className="border border-slate-150 rounded-3xl p-5 space-y-5 bg-white shadow-sm animate-fadeIn">
-                        {/* Assignment Header */}
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-4 gap-3">
-                          <div>
-                            <div className="flex items-center space-x-2">
-                              <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100 uppercase">
-                                {assignment.subject}
-                              </span>
-                              {assignment.week && (
-                                <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 uppercase">
-                                  Tuần {assignment.week}
-                                </span>
-                              )}
-                              <span className="text-[10px] text-slate-400 font-bold font-mono">
-                                Đã giao: {new Date(assignment.createdAt).toLocaleString()}
-                              </span>
-                            </div>
-                            <h4 className="font-extrabold text-slate-800 text-base mt-2">{assignment.title}</h4>
-                          </div>
-                          
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-100">
-                              Đã làm: {doneStudents.length} / {students.length}
-                            </span>
-                            <span className="text-xs font-bold text-rose-600 bg-rose-50 px-3 py-1 rounded-xl border border-rose-100">
-                              Chưa làm: {notDoneStudents.length} / {students.length}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Dual Grid: Done vs Not Done */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                          {/* LIST DONE (ĐÃ LÀM) */}
-                          <div className="bg-emerald-50/20 border border-emerald-100/50 rounded-2xl p-4 space-y-3">
-                            <h5 className="font-extrabold text-xs text-emerald-800 flex items-center space-x-1.5">
-                              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
-                              <span>ĐÃ HOÀN THÀNH ({doneStudents.length})</span>
-                            </h5>
-                            
-                            <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
-                              {doneStudents.length === 0 ? (
-                                <p className="text-center text-slate-400 text-xs py-8">Chưa có học sinh nào nộp bài.</p>
-                              ) : (
-                                doneStudents.map(({ student, sub }) => (
-                                  <div 
-                                    key={student.id} 
-                                    onClick={() => {
-                                      audioSynth.playBubblePop();
-                                      setReviewingSub(sub);
-                                      setReviewingAsg(assignment);
-                                      setEditedScore(sub.score);
-                                      setTeacherNotesText(sub.feedbackMessage || '');
-                                    }}
-                                    className="p-2.5 bg-white border border-slate-150 rounded-xl flex items-center justify-between text-xs hover:shadow-md hover:border-indigo-300 transition cursor-pointer"
-                                    title="Bấm để xem chi tiết bài làm, sửa điểm và nhận xét bằng AI"
-                                  >
-                                    <div className="flex items-center space-x-2.5 min-w-0">
-                                      <span className="text-lg shrink-0">{student.avatar}</span>
-                                      <div className="min-w-0">
-                                        <span className="font-bold text-slate-800 block truncate">{student.name}</span>
-                                        <span className="text-[10px] text-slate-400 font-medium">Nộp: {new Date(sub.submittedAt).toLocaleDateString()}</span>
-                                      </div>
-                                    </div>
-                                    
-                                    <div className="text-right shrink-0 space-y-0.5">
-                                      <div className="font-extrabold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[10px]">
-                                        Đúng: {sub.correctCount} / {sub.totalQuestions}
-                                      </div>
-                                      <div className="text-[9px] text-slate-400 font-bold font-mono">
-                                        ⏱️ {sub.timeSpentSeconds}s ({sub.attemptsCount} lần)
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                          </div>
-
-                          {/* LIST NOT DONE (CHƯA LÀM) */}
-                          <div className="bg-rose-50/10 border border-rose-100/30 rounded-2xl p-4 space-y-3">
-                            <h5 className="font-extrabold text-xs text-rose-800 flex items-center space-x-1.5">
-                              <span className="h-2 w-2 rounded-full bg-rose-400 animate-pulse shrink-0" />
-                              <span>CHƯA LÀM / CHƯA HOÀN THÀNH ({notDoneStudents.length})</span>
-                            </h5>
-                            
-                            <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
-                              {notDoneStudents.length === 0 ? (
-                                <p className="text-center text-emerald-600 font-bold text-xs py-8">🎉 Cả lớp đã hoàn thành xuất sắc!</p>
-                              ) : (
-                                notDoneStudents.map((student) => (
-                                  <div key={student.id} className="p-2.5 bg-white border border-slate-150 rounded-xl flex items-center justify-between text-xs hover:shadow-xs transition">
-                                    <div className="flex items-center space-x-2.5 min-w-0">
-                                      <span className="text-lg shrink-0">{student.avatar}</span>
-                                      <span className="font-bold text-slate-800 truncate block">{student.name}</span>
-                                    </div>
-                                    
-                                    <button
-                                      onClick={() => {
-                                        addViolation(student.id, 'Thiếu bài tập về nhà', `Nhắc nhở bé hoàn thành nhiệm vụ '${assignment.title}' môn ${assignment.subject}.`);
-                                        alert(`Đã gửi thông báo nhắc nhở làm bài tập môn ${assignment.subject} đến phụ huynh em ${student.name}!`);
-                                      }}
-                                      className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 rounded-xl text-[10px] font-bold cursor-pointer transition shrink-0"
-                                    >
-                                      <BellRing className="h-3.5 w-3.5" />
-                                      <span>Nhắc PH</span>
-                                    </button>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  };
 
                   return (
-                    <div className="space-y-8">
-                      {/* Render grouped weeks */}
-                      {activeWeeks.map(wk => (
-                        <div key={wk} className="space-y-4">
-                          <div className="flex items-center space-x-2.5 py-1.5 bg-gradient-to-r from-sky-500 to-indigo-600 text-white px-4 rounded-2xl w-fit shadow-md font-black text-xs">
-                            <span className="text-base">📅</span>
-                            <span>TUẦN {wk} (TỪ TUẦN 1 - 35)</span>
-                          </div>
-                          <div className="space-y-4">
-                            {weeksMap[wk].map(renderAssignmentCard)}
-                          </div>
-                        </div>
-                      ))}
+                    <div className="space-y-6">
+                      <div className="flex items-center space-x-2 py-1 bg-indigo-50 px-3.5 rounded-xl w-fit text-indigo-950 font-black text-xs uppercase tracking-wider border border-indigo-100">
+                        <span>📊 MÔN HỌC ĐANG XEM: {selectedSubject} ({filteredAssignments.length} nhiệm vụ)</span>
+                      </div>
 
-                      {/* Render unassigned week assignments if any */}
-                      {unassignedWeek.length > 0 && (
-                        <div className="space-y-4">
-                          <div className="flex items-center space-x-2.5 py-1.5 bg-gradient-to-r from-slate-500 to-slate-600 text-white px-4 rounded-2xl w-fit shadow-md font-black text-xs">
-                            <span className="text-base">📁</span>
-                            <span>BÀI TẬP CHƯA PHÂN TUẦN</span>
-                          </div>
-                          <div className="space-y-4">
-                            {unassignedWeek.map(renderAssignmentCard)}
-                          </div>
-                        </div>
-                      )}
+                      <div className="space-y-6">
+                        {filteredAssignments.map((assignment) => {
+                          const doneStudents: { student: Student; sub: typeof submissions[0] }[] = [];
+                          const notDoneStudents: Student[] = [];
+
+                          students.forEach(student => {
+                            const subRecord = submissions.find(
+                              s => s.assignmentId === assignment.id && s.studentId === student.id
+                            );
+                            if (subRecord && subRecord.status === 'submitted') {
+                              doneStudents.push({ student, sub: subRecord });
+                            } else {
+                              notDoneStudents.push(student);
+                            }
+                          });
+
+                          const totalCount = students.length || 1;
+                          const doneCount = doneStudents.length;
+                          const percent = Math.round((doneCount / totalCount) * 100);
+
+                          // Score metrics
+                          const scoresList = doneStudents.map(ds => ds.sub.score || 0);
+                          const avgScore = scoresList.length > 0 
+                            ? Math.round((scoresList.reduce((a, b) => a + b, 0) / scoresList.length) * 10) / 10 
+                            : 0;
+                          const maxScore = scoresList.length > 0 ? Math.max(...scoresList) : 0;
+                          const minScore = scoresList.length > 0 ? Math.min(...scoresList) : 0;
+
+                          // Parental checked counter
+                          const parentCheckedCount = students.filter(student => 
+                            parentCheckedAssignments[`${assignment.id}_${student.id}`]
+                          ).length;
+
+                          const isGeneratingReport = generatingReportId === assignment.id;
+                          const reportText = generatedReports[assignment.id];
+
+                          return (
+                            <div key={assignment.id} className="border border-slate-150 rounded-3xl p-6 bg-slate-50/20 shadow-xs space-y-6 hover:shadow-sm transition-all">
+                              {/* Assignment Title Area */}
+                              <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-4 gap-4">
+                                <div>
+                                  <div className="flex items-center space-x-2 flex-wrap gap-y-1.5">
+                                    <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-100 uppercase">
+                                      {assignment.subject}
+                                    </span>
+                                    {assignment.week && (
+                                      <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-100 uppercase">
+                                        Tuần {assignment.week}
+                                      </span>
+                                    )}
+                                    <span className="text-[10px] text-slate-400 font-bold font-mono">
+                                      📅 Giao ngày: {new Date(assignment.createdAt).toLocaleDateString('vi-VN')}
+                                    </span>
+                                  </div>
+                                  <h4 className="font-extrabold text-slate-800 text-base mt-2 flex items-center gap-1.5">
+                                    <span>📝</span> {assignment.title}
+                                  </h4>
+                                </div>
+
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (isGeneratingReport) return;
+                                      audioSynth.playBubblePop();
+                                      setGeneratingReportId(assignment.id);
+                                      try {
+                                        const assignmentsFeedbacks = feedbacks
+                                          .filter(fb => fb.assignmentId === assignment.id)
+                                          .map(fb => fb.message)
+                                          .join("; ");
+
+                                        const res = await fetch("/api/gemini/report", {
+                                          method: "POST",
+                                          headers: {
+                                            "Content-Type": "application/json"
+                                          },
+                                          body: JSON.stringify({
+                                            subject: assignment.subject,
+                                            assignmentTitle: assignment.title,
+                                            percent,
+                                            avgScore,
+                                            maxScore,
+                                            minScore,
+                                            doneCount,
+                                            totalCount,
+                                            notDoneCount: notDoneStudents.length,
+                                            parentCheckedCount,
+                                            feedbacksText: assignmentsFeedbacks || "Không có góp ý trực tiếp nào"
+                                          })
+                                        });
+
+                                        const data = await res.json();
+                                        audioSynth.playSuccess();
+                                        setGeneratingReportId(null);
+                                        
+                                        if (data.error) {
+                                          alert("Không thể tạo báo cáo bằng AI: " + data.error);
+                                        } else {
+                                          setGeneratedReports(prev => ({ ...prev, [assignment.id]: data.text }));
+                                        }
+                                      } catch (err: any) {
+                                        console.error(err);
+                                        setGeneratingReportId(null);
+                                        alert("Đã xảy ra lỗi khi kết nối với máy chủ AI.");
+                                      }
+                                    }}
+                                    className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                                  >
+                                    <span>🤖 Phân tích AI</span>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Progress & Analytics Numbers Grid */}
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {/* Done ratio */}
+                                <div className="bg-white border border-slate-150 p-4 rounded-2xl flex items-center space-x-3 shadow-xs">
+                                  <div className="relative flex items-center justify-center">
+                                    <svg className="w-14 h-14 transform -rotate-90">
+                                      <circle cx="28" cy="28" r="24" stroke="#f1f5f9" strokeWidth="6" fill="transparent" />
+                                      <circle cx="28" cy="28" r="24" stroke="#10b981" strokeWidth="6" fill="transparent" 
+                                        strokeDasharray={2 * Math.PI * 24}
+                                        strokeDashoffset={2 * Math.PI * 24 * (1 - percent / 100)}
+                                      />
+                                    </svg>
+                                    <span className="absolute text-xs font-black text-slate-700">{percent}%</span>
+                                  </div>
+                                  <div>
+                                    <span className="block text-[9px] font-black text-slate-400 uppercase tracking-wider">Tiến độ nộp bài</span>
+                                    <span className="text-xs font-bold text-slate-600">Đã nộp: <strong className="text-emerald-600 text-sm font-black">{doneCount}</strong>/{totalCount} học sinh</span>
+                                  </div>
+                                </div>
+
+                                {/* Score metrics */}
+                                <div className="bg-white border border-slate-150 p-4 rounded-2xl flex flex-col justify-center shadow-xs">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">Thống kê điểm số học lực</span>
+                                  <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                                    <span className="flex flex-col items-center p-1 bg-slate-50 border border-slate-100 rounded-lg w-[31%]">
+                                      <span className="text-[8px] text-slate-400 font-bold uppercase">TB</span>
+                                      <span className="text-sm font-black text-indigo-600">{avgScore}</span>
+                                    </span>
+                                    <span className="flex flex-col items-center p-1 bg-emerald-50 border border-emerald-100 rounded-lg w-[31%]">
+                                      <span className="text-[8px] text-slate-400 font-bold uppercase">Max</span>
+                                      <span className="text-sm font-black text-emerald-600">{maxScore}</span>
+                                    </span>
+                                    <span className="flex flex-col items-center p-1 bg-rose-50 border border-rose-100 rounded-lg w-[31%]">
+                                      <span className="text-[8px] text-slate-400 font-bold uppercase">Min</span>
+                                      <span className="text-sm font-black text-rose-600">{minScore}</span>
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Parent engagement */}
+                                <div className="bg-white border border-slate-150 p-4 rounded-2xl flex items-center space-x-3.5 shadow-xs">
+                                  <span className="text-3xl">👨‍👩‍👦</span>
+                                  <div>
+                                    <span className="block text-[9px] font-black text-slate-400 uppercase tracking-wider">Mức độ đồng hành</span>
+                                    <span className="text-xs font-bold text-slate-600">
+                                      <strong className="text-amber-500 text-sm font-black">{parentCheckedCount}</strong>/{totalCount} Phụ huynh
+                                    </span>
+                                    <span className="block text-[9px] text-amber-600 font-bold mt-0.5">Đã mở ra đối soát & nhắc con</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* AI smart report content */}
+                              {isGeneratingReport && (
+                                <div className="bg-purple-50/50 border border-purple-200 rounded-2xl p-4 text-center space-y-2 animate-pulse">
+                                  <div className="inline-block w-5 h-5 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                                  <p className="text-xs text-purple-900 font-black uppercase tracking-wider animate-pulse">Trợ lý AI đang phân tích toàn diện điểm số và phản hồi để sinh báo cáo...</p>
+                                </div>
+                              )}
+
+                              {reportText && !isGeneratingReport && (
+                                <div className="bg-gradient-to-br from-purple-50 to-indigo-50/30 border-2 border-purple-200/60 rounded-2xl p-4 text-xs text-slate-700 leading-relaxed font-bold space-y-1">
+                                  <div className="flex items-center justify-between border-b border-purple-100 pb-2 mb-2">
+                                    <span className="text-purple-900 uppercase font-black tracking-widest text-[10px] flex items-center gap-1">
+                                      <span>🤖 Báo cáo phân tích tự động bằng AI</span>
+                                    </span>
+                                    <button
+                                      onClick={() => setGeneratedReports(prev => {
+                                        const c = { ...prev };
+                                        delete c[assignment.id];
+                                        return c;
+                                      })}
+                                      className="text-[9px] text-rose-600 font-black uppercase hover:underline"
+                                    >
+                                      Đóng báo cáo
+                                    </button>
+                                  </div>
+                                  <p className="whitespace-pre-line text-slate-600 font-medium font-sans leading-relaxed">{reportText}</p>
+                                </div>
+                              )}
+
+                              {/* Dual Section View: 1. Student detail logs | 2. Parent checks & comments */}
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 pt-2">
+                                {/* Students Details Column */}
+                                <div className="bg-white border border-slate-150 rounded-2xl p-4 space-y-3 shadow-xs">
+                                  <div className="border-b border-slate-100 pb-2 flex items-center justify-between">
+                                    <h5 className="font-extrabold text-xs text-slate-800 uppercase tracking-wider">
+                                      📝 Danh sách nộp bài ({doneCount}/{totalCount})
+                                    </h5>
+                                  </div>
+
+                                  <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                                    {doneStudents.length === 0 ? (
+                                      <p className="text-center text-slate-400 italic text-xs py-8">Chưa có học sinh nào nộp bài.</p>
+                                    ) : (
+                                      doneStudents.map(({ student, sub }) => (
+                                        <div 
+                                          key={student.id}
+                                          className="p-2.5 bg-slate-50/50 hover:bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between text-xs transition-all"
+                                        >
+                                          <div className="flex items-center space-x-2.5 min-w-0">
+                                            <span className="text-lg shrink-0">{student.avatar}</span>
+                                            <div className="min-w-0">
+                                              <span className="font-extrabold text-slate-800 block truncate">{student.name}</span>
+                                              <span className="text-[10px] text-slate-400 font-bold font-mono">
+                                                Nộp: {new Date(sub.submittedAt).toLocaleDateString('vi-VN')}
+                                              </span>
+                                            </div>
+                                          </div>
+
+                                          <div className="flex items-center space-x-2 shrink-0">
+                                            <div className="text-right space-y-0.5">
+                                              <span className="inline-block text-[9px] font-black text-indigo-700 bg-indigo-50 border border-indigo-150 px-2 py-0.5 rounded">
+                                                Điểm: {sub.score}/10
+                                              </span>
+                                              <div className="text-[9px] text-slate-400 font-bold font-mono">
+                                                ⏱️ {sub.timeSpentSeconds}s ({sub.attemptsCount || 1} lần)
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))
+                                    )}
+
+                                    {/* Unsubmitted list in a clean, small sub-section */}
+                                    {notDoneStudents.length > 0 && (
+                                      <div className="pt-3 border-t border-dashed border-slate-100 space-y-2">
+                                        <span className="text-[10px] font-black text-rose-500 uppercase tracking-wider block">⚠️ CHƯA HOÀN THÀNH ({notDoneStudents.length}):</span>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                          {notDoneStudents.map(student => (
+                                            <div key={student.id} className="p-1.5 bg-rose-50/30 border border-rose-100/30 rounded-lg flex items-center justify-between text-[11px]">
+                                              <span className="font-bold text-slate-700 truncate">{student.name}</span>
+                                              <button
+                                                onClick={() => {
+                                                  addViolation(student.id, 'Thiếu bài tập về nhà', `Bé chưa hoàn thành nhiệm vụ '${assignment.title}' môn ${assignment.subject}.`);
+                                                  alert(`Đã gửi thông báo nhắc nhở làm bài tập môn ${assignment.subject} đến phụ huynh em ${student.name}!`);
+                                                }}
+                                                className="text-[9px] font-black text-amber-700 bg-amber-50 border border-amber-150 px-1.5 py-0.5 rounded uppercase hover:bg-amber-100"
+                                              >
+                                                Nhắc PH
+                                              </button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Parent Engagement Column */}
+                                <div className="bg-white border border-slate-150 rounded-2xl p-4 space-y-3 shadow-xs">
+                                  <div className="border-b border-slate-100 pb-2">
+                                    <h5 className="font-extrabold text-xs text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                                      <span>🏡</span> Nhật ký ba mẹ đồng hành & góp ý
+                                    </h5>
+                                  </div>
+
+                                  <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
+                                    {/* Check-ins lists */}
+                                    {students.filter(student => parentCheckedAssignments[`${assignment.id}_${student.id}`]).length === 0 &&
+                                     feedbacks.filter(f => f.assignmentId === assignment.id).length === 0 ? (
+                                      <p className="text-center text-slate-400 italic text-xs py-10">Chưa ghi nhận hoạt động nào từ phụ huynh cho bài tập này.</p>
+                                    ) : (
+                                      <>
+                                        {/* 1. Parent verified check-ins */}
+                                        {students.map(student => {
+                                          const checkedTime = parentCheckedAssignments[`${assignment.id}_${student.id}`];
+                                          if (!checkedTime) return null;
+                                          return (
+                                            <div key={`checked_${student.id}`} className="p-2 bg-emerald-50/50 border border-emerald-100/50 rounded-xl text-xs flex items-center justify-between">
+                                              <div className="flex items-center space-x-2">
+                                                <span className="text-lg">🏡</span>
+                                                <div>
+                                                  <span className="font-extrabold text-emerald-950 block">PH em {student.name}</span>
+                                                  <span className="text-[10px] text-emerald-700 font-bold">Đồng hành, chấm chữ cùng con</span>
+                                                </div>
+                                              </div>
+                                              <span className="text-[9px] text-slate-400 font-mono bg-white px-2 py-0.5 rounded border border-slate-100">
+                                                {new Date(checkedTime).toLocaleDateString('vi-VN')}
+                                              </span>
+                                            </div>
+                                          );
+                                        })}
+
+                                        {/* 2. Feedback comments and replies */}
+                                        {feedbacks
+                                          .filter(fb => fb.studentId && students.some(s => s.id === fb.studentId))
+                                          .map((fb) => {
+                                            const student = students.find(s => s.id === fb.studentId);
+                                            if (!student) return null;
+                                            return (
+                                              <div key={fb.id} className="p-2.5 bg-amber-50/30 border border-amber-100 rounded-xl space-y-1.5 text-xs">
+                                                <div className="flex items-center justify-between">
+                                                  <span className="font-extrabold text-slate-800">💬 Góp ý của PH em {student.name}:</span>
+                                                  <span className="text-[9px] text-slate-400 font-mono">{new Date(fb.createdAt).toLocaleDateString()}</span>
+                                                </div>
+                                                <p className="italic text-slate-600 font-medium">"{fb.message}"</p>
+
+                                                {fb.reply ? (
+                                                  <div className="bg-emerald-50/70 border border-emerald-150 p-2 rounded-lg text-xs">
+                                                    <span className="font-black text-emerald-800 text-[9px] block">Thầy/Cô đã phản hồi:</span>
+                                                    <p className="italic font-medium text-slate-600">"{fb.reply}"</p>
+                                                  </div>
+                                                ) : (
+                                                  <div className="pt-1.5 flex justify-end">
+                                                    <button
+                                                      onClick={() => {
+                                                        const rep = prompt(`Nhập phản hồi ý kiến của phụ huynh em ${student.name}:`);
+                                                        if (rep) {
+                                                          replyFeedback(fb.id, rep);
+                                                          alert('Đã gửi phản hồi đến phụ huynh thành công!');
+                                                        }
+                                                      }}
+                                                      className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-[9px] font-black uppercase cursor-pointer transition"
+                                                    >
+                                                      Phản hồi ngay
+                                                    </button>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })()

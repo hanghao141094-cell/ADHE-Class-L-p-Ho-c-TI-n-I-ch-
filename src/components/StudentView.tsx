@@ -659,7 +659,7 @@ export const StudentView: React.FC = () => {
               <Sparkles className="h-5 w-5 text-amber-500 animate-pulse" />
             </h2>
             <p className="text-xs text-slate-400 font-bold mt-1 uppercase tracking-wider">
-              Lớp 3A | GV chủ nhiệm: Cô giáo Mai Anh
+              Lớp 3A | GV chủ nhiệm: {localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh'}
             </p>
             <p className="text-xs text-indigo-500 italic font-semibold mt-1">
               " {favoriteMotto} "
@@ -1013,7 +1013,7 @@ export const StudentView: React.FC = () => {
                               {/* Teacher feedback view if present */}
                               {sub.feedbackMessage && (
                                 <div className="p-3 bg-teal-50 border border-teal-150 rounded-2xl text-xs space-y-1 text-slate-600">
-                                  <span className="font-black text-teal-800 block">💬 Nhận xét và chấm điểm của Cô Mai Anh:</span>
+                                  <span className="font-black text-teal-800 block">💬 Nhận xét và chấm điểm của {localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh'}:</span>
                                   <p className="italic font-bold">"{sub.feedbackMessage}"</p>
                                 </div>
                               )}
@@ -1939,7 +1939,7 @@ export const StudentView: React.FC = () => {
               {/* Teacher Comment if exists */}
               {reviewingSubmission.submission.feedbackMessage && (
                 <div className="p-4 bg-teal-50 border border-teal-100 rounded-2xl text-xs space-y-1.5">
-                  <span className="font-black text-teal-800 block uppercase tracking-wider text-[10px]">💬 Đánh giá nhận xét của Cô giáo Mai Anh:</span>
+                  <span className="font-black text-teal-800 block uppercase tracking-wider text-[10px]">💬 Đánh giá nhận xét của {localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh'}:</span>
                   <p className="italic font-bold text-slate-700">"{reviewingSubmission.submission.feedbackMessage}"</p>
                 </div>
               )}
