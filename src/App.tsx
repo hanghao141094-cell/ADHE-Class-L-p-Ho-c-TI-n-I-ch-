@@ -329,7 +329,7 @@ function DashboardContainer() {
                         <h2 className="text-base font-black text-amber-950 uppercase tracking-tight">
                           QUẢN LÝ LỚP HỌC & NHIỆM VỤ
                         </h2>
-                        <span className="text-xs font-bold text-slate-400 lowercase">🎒 ⭐ 🏅 Góc Lớp Học Tiện Ích</span>
+                        <span className="text-xs font-bold text-slate-400 lowercase">🎒 ⭐ 🏅 Chi tiết góc lớp học vui vẻ</span>
                       </div>
                     </div>
 

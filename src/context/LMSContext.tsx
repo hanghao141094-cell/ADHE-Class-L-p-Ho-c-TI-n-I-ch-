@@ -112,8 +112,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
       id: 'b1',
       type: 'image',
       url: 'https://images.unsplash.com/photo-1577896851231-70ef18881754?w=1000&auto=format&fit=crop',
-      title: 'Chào mừng bé đến với ADHE Class! 🎉',
-      description: 'Học tập tiện ích, tương tác thông minh cùng thầy cô, bạn bè và gia đình.',
+      title: 'Chào mừng bé đến với Lớp Học Vui Vẻ! 🎉',
+      description: 'Nơi mỗi ngày đến trường là một ngày ngập tràn niềm vui, sáng tạo và những bài học bổ ích mới lạ! Lớp học được thiết kế hiện đại, đầy đủ tiện nghi cho bé tự do khám phá.',
       bgClass: 'from-amber-400 via-pink-400 to-rose-400',
       duration: 6,
       note: 'Hình ảnh lớp học ngày đầu tiên nhập học đầy phấn khởi!'
