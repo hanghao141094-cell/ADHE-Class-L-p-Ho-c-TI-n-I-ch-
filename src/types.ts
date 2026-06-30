@@ -5,6 +5,24 @@
 
 export type UserRole = 'teacher' | 'student' | 'parent';
 
+export interface Teacher {
+  id: string;
+  name: string;
+  phone: string;
+  username: string;
+  avatar: string;
+  role: 'teacher';
+}
+
+export interface Parent {
+  id: string;
+  name: string;
+  phone: string;
+  studentId: string;
+  studentName: string;
+  role: 'parent';
+}
+
 export interface User {
   id: string;
   name: string;

@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { LMSProvider, useLMS } from './context/LMSContext';
 import { LoginView } from './components/LoginView';
+import { SystemDataView } from './components/SystemDataView';
 import { BannerSlider } from './components/BannerSlider';
 import { EducationalLinks } from './components/EducationalLinks';
 import { TeacherView } from './components/TeacherView';
@@ -83,35 +84,7 @@ function DashboardContainer() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans pb-12 text-slate-800">
       
-      {/* Real-time Sandbox Switcher Bar (Highly Interactive for Demo purposes!) */}
-      <div className="bg-slate-900 text-slate-300 py-2 px-4 text-[11px] font-bold flex flex-wrap items-center justify-between gap-2 border-b border-slate-800">
-        <div className="flex items-center space-x-1.5">
-          <Layers className="h-3.5 w-3.5 text-sky-400 animate-pulse" />
-          <span className="uppercase text-sky-400 font-extrabold tracking-wider">Hộp Thử Nghiệm 3 Vai Trò:</span>
-          <span className="text-slate-400 font-normal">Nhấp chuyển đổi nhanh tài khoản để kiểm tra đồng bộ thời gian thực:</span>
-        </div>
-        
-        {/* Quick select buttons */}
-        <div className="flex flex-wrap gap-1.5">
-          {availableUsers.map((user) => (
-            <button
-              key={user.id}
-              onClick={() => {
-                audioSynth.playBubblePop();
-                setCurrentUser(user);
-              }}
-              className={`px-2.5 py-1 rounded font-sans cursor-pointer text-[10px] transition-all flex items-center space-x-1 ${
-                currentUser.id === user.id
-                  ? 'bg-sky-500 text-white shadow-sm font-extrabold'
-                  : 'bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white'
-              }`}
-            >
-              <span>{user.avatar}</span>
-              <span className="max-w-[100px] truncate">{user.name.split(' (')[0]}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+
 
       {/* Primary Application Header as requested */}
       <header className="bg-white border-b border-slate-100 shadow-sm sticky top-0 z-40">
@@ -285,7 +258,7 @@ function DashboardContainer() {
                     audioSynth.playBubblePop();
                     setCurrentTab('links');
                   }}
-                  className="bg-gradient-to-br from-emerald-50 via-teal-50 to-amber-50/50 hover:from-emerald-100 hover:to-teal-100 rounded-3xl p-6 border-4 border-emerald-100 hover:border-emerald-300 shadow-sm hover:shadow-md transition-all text-left flex items-start space-x-4 cursor-pointer transform hover:-translate-y-1 relative overflow-hidden group"
+                  className="bg-gradient-to-br from-emerald-50 via-teal-50 to-amber-50/50 hover:from-emerald-100 hover:to-teal-100 rounded-3xl p-6 border-4 border-emerald-100 hover:border-emerald-300 shadow-sm hover:shadow-md transition-all text-left flex items-start space-x-4 cursor-pointer transform hover:-translate-y-1 relative overflow-hidden group w-full"
                 >
                   <div className="absolute top-2 right-2 text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-extrabold tracking-wider uppercase">Nhấp để mở ➔</div>
                   <span className="p-4 bg-emerald-500 text-white rounded-2xl text-2xl shadow-md shadow-emerald-500/10 group-hover:scale-110 transition-transform">
@@ -294,13 +267,10 @@ function DashboardContainer() {
                   <div className="flex-1 min-w-0 pr-4">
                     <h3 className="text-sm font-black text-emerald-950 uppercase tracking-tight flex items-center gap-1.5">
                       <span>LIÊN KẾT HỌC TẬP</span>
-                      <span className="text-[10px] text-slate-400 font-bold lowercase">🌐 💻 📚</span>
+                      <span className="text-[10px] text-slate-400 font-bold lowercase font-mono">🌐 💻 📚</span>
                     </h3>
-                    <p className="text-xs text-emerald-800 font-bold mt-1 leading-relaxed">
-                      Kho học liệu điện tử chất lượng cao: OLM, Trạng Nguyên Tiếng Việt, Youtube Kids, sách giáo khoa điện tử...
-                    </p>
-                    <p className="text-[10px] text-slate-400 font-extrabold uppercase mt-2.5 flex items-center gap-1">
-                      <span>• Nội dung học tập được giáo viên kiểm duyệt</span>
+                    <p className="text-xs text-emerald-800 font-bold mt-2 leading-relaxed">
+                      Kết nối nhanh đến kho bài giảng, phần mềm trò chơi tương tác và các trang học liệu chuẩn quốc gia.
                     </p>
                   </div>
                 </button>
@@ -315,40 +285,27 @@ function DashboardContainer() {
                     audioSynth.playBubblePop();
                     setCurrentTab('management');
                   }}
-                  className="w-full bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50/50 hover:from-amber-100 hover:via-orange-100 hover:to-pink-100 rounded-3xl p-8 border-4 border-amber-100 hover:border-amber-300 shadow-sm hover:shadow-lg transition-all text-left flex flex-col justify-between cursor-pointer transform hover:-translate-y-1 relative overflow-hidden group min-h-[350px] lg:min-h-0"
+                  className="w-full bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50/50 hover:from-amber-100 hover:via-orange-100 hover:to-pink-100 rounded-3xl p-8 border-4 border-amber-100 hover:border-amber-300 shadow-sm hover:shadow-lg transition-all text-left flex flex-col justify-between cursor-pointer transform hover:-translate-y-1 relative overflow-hidden group min-h-[250px] lg:min-h-0"
                 >
                   <div className="absolute top-4 right-4 text-xs bg-amber-500 text-white px-3 py-1 rounded-full font-extrabold tracking-wider uppercase shadow-sm">Bấm để truy cập ngay ➔</div>
                   
                   {/* Icon and metadata */}
-                  <div className="space-y-4">
+                  <div className="space-y-4 my-auto">
                     <div className="flex items-center space-x-3">
                       <span className="p-4 bg-amber-500 text-white rounded-3xl text-3xl shadow-lg shadow-amber-500/20 group-hover:scale-110 transition-transform">
                         🎒
                       </span>
                       <div>
-                        <h2 className="text-base font-black text-amber-950 uppercase tracking-tight">
+                        <h2 className="text-lg font-black text-amber-950 uppercase tracking-tight">
                           QUẢN LÝ LỚP HỌC & NHIỆM VỤ
                         </h2>
-                        <span className="text-xs font-bold text-slate-400 lowercase">🎒 ⭐ 🏅 Chi tiết góc lớp học vui vẻ</span>
+                        <span className="text-xs font-bold text-slate-400 lowercase font-mono">🎒 ⭐ 🏅 Góc Tiện Ích Lớp Học</span>
                       </div>
                     </div>
 
-                    <p className="text-xs text-amber-900 font-semibold leading-relaxed max-w-xl">
-                      Cổng kết nối thông minh dành riêng cho <strong>{getRoleBadge()}</strong>. <br />
-                      Xem danh sách bài tập tự luận, bài trắc nghiệm lấp lánh, hoạt động trải nghiệm thực tế, bảng xếp hạng nhận sao, lịch sử điểm danh hằng ngày và thông báo kết quả rèn luyện học tập tức thời.
+                    <p className="text-xs text-amber-900 font-bold leading-relaxed max-w-xl">
+                      Hệ thống bảng xếp hạng sao thưởng, bài ôn tập hàng tuần, điểm danh nhanh và các kết nối trao đổi tin nhắn trực tiếp.
                     </p>
-                  </div>
-
-                  {/* Preview features list styled like tags */}
-                  <div className="space-y-3 pt-6 border-t border-amber-200/40">
-                    <span className="block text-[10px] font-black text-amber-800 uppercase tracking-wider">Các tiện ích tích hợp bên trong:</span>
-                    <div className="flex flex-wrap gap-2">
-                      {['Quản lý học sinh 👦', 'Nhiệm vụ học tập 📝', 'Điểm danh hằng ngày 📅', 'Khen thưởng sao vàng 🏅', 'Kết quả học tập 📈', 'Cài đặt lớp học ⚙️'].map((tag, idx) => (
-                        <span key={idx} className="px-3 py-1.5 bg-white/80 border border-amber-200/50 rounded-xl text-[11px] font-black text-amber-900 group-hover:bg-white transition-colors">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
                   </div>
                 </button>
               </div>
@@ -425,6 +382,11 @@ export default function App() {
 // Subwrapper to consume context safely
 function LMSConsumerWrapper() {
   const { currentUser } = useLMS();
+  const [showSystemDataScreen, setShowSystemDataScreen] = useState(true);
+
+  if (showSystemDataScreen && !currentUser) {
+    return <SystemDataView onContinue={() => setShowSystemDataScreen(false)} />;
+  }
 
   if (!currentUser) {
     return <LoginView />;

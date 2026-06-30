@@ -15,15 +15,21 @@ import {
   SystemSettings,
   UserRole,
   RewardRule,
-  ZaloNotification
+  ZaloNotification,
+  Teacher,
+  Parent
 } from '../types';
 
 interface LMSContextType {
-  currentUser: User;
-  setCurrentUser: (user: User) => void;
+  currentUser: User | null;
+  setCurrentUser: React.Dispatch<React.SetStateAction<User | null>>;
   availableUsers: User[];
   students: Student[];
   setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
+  teachers: Teacher[];
+  setTeachers: React.Dispatch<React.SetStateAction<Teacher[]>>;
+  parents: Parent[];
+  setParents: React.Dispatch<React.SetStateAction<Parent[]>>;
   attendanceList: Attendance[];
   violations: Violation[];
   assignments: Assignment[];
@@ -38,6 +44,8 @@ interface LMSContextType {
   deleteStudent: (id: string) => void;
   updateStudent: (id: string, updatedData: Partial<Student>) => void;
   importStudents: (list: Omit<Student, 'stars' | 'flags' | 'goldCards' | 'rank'>[]) => void;
+  importAllData: (teachers: Teacher[], students: Student[], parents: Parent[]) => void;
+  clearAllData: () => void;
   
   markAttendance: (studentId: string, date: string, isAbsent: boolean, notes?: string) => void;
   deleteAttendance: (studentId: string, date: string) => void;
@@ -66,25 +74,10 @@ interface LMSContextType {
 const LMSContext = createContext<LMSContextType | undefined>(undefined);
 
 // Initial Users
-const INITIAL_USERS: User[] = [
-  { id: 'teacher_1', name: 'Cô giáo Mai Anh', avatar: '👩‍🏫', role: 'teacher' },
-  { id: 'student_1', name: 'Nguyễn An', avatar: '👦', role: 'student', studentId: 'stu_1' },
-  { id: 'student_2', name: 'Trần Bình', avatar: '👶', role: 'student', studentId: 'stu_2' },
-  { id: 'student_3', name: 'Lê Vy', avatar: '👧', role: 'student', studentId: 'stu_3' },
-  { id: 'student_4', name: 'Phạm Dung', avatar: '🦄', role: 'student', studentId: 'stu_4' },
-  { id: 'parent_1', name: 'Anh Nguyễn Thành (PH Nguyễn An)', avatar: '👨', role: 'parent', studentId: 'stu_1' },
-  { id: 'parent_2', name: 'Anh Trần Hùng (PH Trần Bình)', avatar: '🧔', role: 'parent', studentId: 'stu_2' },
-  { id: 'parent_3', name: 'Chị Lê Hải (PH Lê Vy)', avatar: '👩', role: 'parent', studentId: 'stu_3' },
-  { id: 'parent_4', name: 'Anh Phạm Nam (PH Phạm Dung)', avatar: '👨‍💼', role: 'parent', studentId: 'stu_4' },
-];
+const INITIAL_USERS: User[] = [];
 
 // Initial Students
-const INITIAL_STUDENTS: Student[] = [
-  { id: 'stu_1', name: 'Nguyễn An', avatar: '👦', parentName: 'Nguyễn Thành', parentPhone: '0912345678', stars: 62, flags: 1, goldCards: 0 },
-  { id: 'stu_2', name: 'Trần Bình', avatar: '👶', parentName: 'Trần Hùng', parentPhone: '0923456789', stars: 15, flags: 0, goldCards: 0 },
-  { id: 'stu_3', name: 'Lê Vy', avatar: '👧', parentName: 'Lê Hải', parentPhone: '0934567890', stars: 125, flags: 2, goldCards: 0 },
-  { id: 'stu_4', name: 'Phạm Dung', avatar: '🦄', parentName: 'Phạm Nam', parentPhone: '0945678901', stars: 260, flags: 5, goldCards: 1 },
-];
+const INITIAL_STUDENTS: Student[] = [];
 
 // Default Settings
 const DEFAULT_SETTINGS: SystemSettings = {
@@ -112,8 +105,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
       id: 'b1',
       type: 'image',
       url: 'https://images.unsplash.com/photo-1577896851231-70ef18881754?w=1000&auto=format&fit=crop',
-      title: 'Chào mừng bé đến với Lớp Học Vui Vẻ! 🎉',
-      description: 'Nơi mỗi ngày đến trường là một ngày ngập tràn niềm vui, sáng tạo và những bài học bổ ích mới lạ! Lớp học được thiết kế hiện đại, đầy đủ tiện nghi cho bé tự do khám phá.',
+      title: 'Chào mừng bé đến với ADHE Class! 🎉',
+      description: 'Học tập tiện ích, tương tác thông minh cùng thầy cô, bạn bè và gia đình.',
       bgClass: 'from-amber-400 via-pink-400 to-rose-400',
       duration: 6,
       note: 'Hình ảnh lớp học ngày đầu tiên nhập học đầy phấn khởi!'
@@ -146,159 +139,15 @@ const DEFAULT_SETTINGS: SystemSettings = {
 };
 
 // Default Assignments (demonstrating all 4 question types across multiple subjects)
-const DEFAULT_ASSIGNMENTS: Assignment[] = [
-  {
-    id: 'as_1',
-    title: 'Phép nhân phép chia lớp 3',
-    description: 'Bé hãy luyện tập các câu hỏi về phép nhân và phép chia trong bảng cửu chương nhé!',
-    subject: 'Toán',
-    attachments: [
-      { name: 'Bang_Cuu_Chuong_Huong_Dan.pdf', type: 'pdf', size: '1.2 MB' }
-    ],
-    links: [
-      { title: 'Video vui học phép nhân (YouTube)', url: 'https://youtube.com' }
-    ],
-    rewardStars: 10,
-    criteria: {
-      shuffleQuestions: false,
-      mustGet100: false,
-      onlyOneAttempt: false,
-      timeLimitHours: 24
-    },
-    createdAt: new Date().toISOString(),
-    questions: [
-      {
-        id: 'q1_1',
-        type: 'single_choice',
-        questionText: 'Tính nhẩm kết quả của phép tính sau: 7 x 8 = ?',
-        options: ['54', '56', '62', '64'],
-        correctAnswer: 'B' // 56
-      },
-      {
-        id: 'q1_2',
-        type: 'true_false',
-        questionText: 'Bé hãy xem các phép tính sau đúng hay sai nhé:',
-        trueFalseOptions: [
-          { text: '6 x 9 = 54', correct: true },
-          { text: '45 : 5 = 8', correct: false },
-          { text: '8 x 4 = 32', correct: true },
-          { text: '21 : 3 = 7', correct: true }
-        ]
-      },
-      {
-        id: 'q1_3',
-        type: 'matching',
-        questionText: 'Bé hãy nối phép tính ở cột bên trái với kết quả đúng ở cột bên phải nhé!',
-        matchingLeft: ['9 x 3', '40 : 5', '6 x 7', '36 : 4'],
-        matchingRight: ['8', '27', '9', '42'],
-        matchingPairs: {
-          '9 x 3': '27',
-          '40 : 5': '8',
-          '6 x 7': '42',
-          '36 : 4': '9'
-        }
-      },
-      {
-        id: 'q1_4',
-        type: 'fill_blank',
-        questionText: 'Bé điền số thích hợp vào chỗ trống để hoàn thành câu dưới đây:',
-        blanksText: 'Nếu ta có 5 túi kẹo, mỗi túi có 6 viên kẹo thì tổng số kẹo là ... viên. Nếu chia đều số kẹo này cho 3 bạn, mỗi bạn sẽ nhận được ... viên kẹo.',
-        blankChoices: ['15', '10', '30', '12', '20'],
-        blankAnswers: ['30', '10']
-      }
-    ]
-  },
-  {
-    id: 'as_2',
-    title: 'Từ đồng nghĩa & Từ trái nghĩa',
-    description: 'Bài tập ôn tập về từ đồng nghĩa và từ trái nghĩa trong tiếng Việt lớp 3.',
-    subject: 'Tiếng Việt',
-    attachments: [],
-    links: [],
-    rewardStars: 8,
-    criteria: {
-      shuffleQuestions: true,
-      mustGet100: true,
-      onlyOneAttempt: false,
-      timeLimitHours: 12
-    },
-    createdAt: new Date(Date.now() - 3600000 * 3).toISOString(),
-    questions: [
-      {
-        id: 'q2_1',
-        type: 'single_choice',
-        questionText: 'Từ nào sau đây ĐỒNG NGHĨA với từ "Chăm chỉ"?',
-        options: ['Lười biếng', 'Cần cù', 'Ngoan ngoãn', 'Nhút nhát'],
-        correctAnswer: 'B'
-      },
-      {
-        id: 'q2_2',
-        type: 'matching',
-        questionText: 'Hãy nối các cặp từ TRÁI NGHĨA với nhau:',
-        matchingLeft: ['Cao', 'Sáng', 'Hiền lành', 'Chăm chỉ'],
-        matchingRight: ['Lười biếng', 'Thấp', 'Tối', 'Hung dữ'],
-        matchingPairs: {
-          'Cao': 'Thấp',
-          'Sáng': 'Tối',
-          'Hiền lành': 'Hung dữ',
-          'Chăm chỉ': 'Lười biếng'
-        }
-      }
-    ]
-  }
-];
+const DEFAULT_ASSIGNMENTS: Assignment[] = [];
 
-const DEFAULT_ATTENDANCE: Attendance[] = [
-  { id: '2026-06-23_stu_2', date: '2026-06-23', studentId: 'stu_2', isAbsent: true, notes: 'Bị ốm sốt' }
-];
+const DEFAULT_ATTENDANCE: Attendance[] = [];
 
-const DEFAULT_VIOLATIONS: Violation[] = [
-  {
-    id: 'v_1',
-    studentId: 'stu_2',
-    studentName: 'Trần Bình',
-    violationType: 'Thiếu bài tập về nhà',
-    message: 'Quên làm bài tập Toán ngày 22/06.',
-    isResolved: false,
-    createdAt: new Date(Date.now() - 3600000 * 24).toISOString()
-  }
-];
+const DEFAULT_VIOLATIONS: Violation[] = [];
 
-const DEFAULT_FEEDBACKS: Feedback[] = [
-  {
-    id: 'fb_1',
-    parentId: 'parent_1',
-    parentName: 'Anh Nguyễn Thành',
-    studentId: 'stu_1',
-    studentName: 'Nguyễn An',
-    message: 'Dạ chào cô Mai Anh, tuần này cháu An ở lớp học hành có tập trung nghe giảng không cô? Nhờ cô nhắc cháu viết chữ nắn nót hơn giúp gia đình ạ.',
-    isDraft: false,
-    reply: 'Chào anh Thành, tuần này cháu An học rất hăng hái, phát biểu to rõ. Cô sẽ chú ý nhắc cháu rèn chữ viết cẩn thận hơn nhé.',
-    createdAt: new Date(Date.now() - 3600000 * 12).toISOString()
-  }
-];
+const DEFAULT_FEEDBACKS: Feedback[] = [];
 
-const DEFAULT_SUBMISSIONS: Submission[] = [
-  {
-    id: 'stu_1_as_1',
-    assignmentId: 'as_1',
-    studentId: 'stu_1',
-    studentName: 'Nguyễn An',
-    status: 'submitted',
-    score: 8,
-    correctCount: 3,
-    totalQuestions: 4,
-    timeSpentSeconds: 320,
-    submittedAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-    answers: {
-      'q1_1': 'B', // Correct
-      'q1_2': { '6 x 9 = 54': true, '45 : 5 = 8': false, '8 x 4 = 32': true, '21 : 3 = 7': true }, // Correct
-      'q1_3': { '9 x 3': '27', '40 : 5': '8', '6 x 7': '42', '36 : 4': '9' }, // Correct
-      'q1_4': { '0': '30', '1': '15' } // Wrong (correct is 30, 10)
-    },
-    attemptsCount: 1
-  }
-];
+const DEFAULT_SUBMISSIONS: Submission[] = [];
 
 export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Load state helper
@@ -313,11 +162,13 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // State definitions
-  const [currentUser, setCurrentUser] = useState<User>(() => loadState('lms_current_user', INITIAL_USERS[0]));
+  const [currentUser, setCurrentUser] = useState<User | null>(() => loadState('lms_current_user', null));
+  const [teachers, setTeachers] = useState<Teacher[]>(() => loadState('lms_teachers', []));
   const [students, setStudents] = useState<Student[]>(() => {
     const raw = loadState<Student[]>('lms_students', INITIAL_STUDENTS);
     return recalculateRanks(raw);
   });
+  const [parents, setParents] = useState<Parent[]>(() => loadState('lms_parents', []));
   const [attendanceList, setAttendanceList] = useState<Attendance[]>(() => loadState('lms_attendance', DEFAULT_ATTENDANCE));
   const [violations, setViolations] = useState<Violation[]>(() => loadState('lms_violations', DEFAULT_VIOLATIONS));
   const [assignments, setAssignments] = useState<Assignment[]>(() => loadState('lms_assignments', DEFAULT_ASSIGNMENTS));
@@ -374,8 +225,16 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [currentUser]);
 
   useEffect(() => {
+    localStorage.setItem('lms_teachers', JSON.stringify(teachers));
+  }, [teachers]);
+
+  useEffect(() => {
     localStorage.setItem('lms_students', JSON.stringify(students));
   }, [students]);
+
+  useEffect(() => {
+    localStorage.setItem('lms_parents', JSON.stringify(parents));
+  }, [parents]);
 
   useEffect(() => {
     localStorage.setItem('lms_attendance', JSON.stringify(attendanceList));
@@ -418,8 +277,14 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         case 'lms_current_user':
           setCurrentUser(val);
           break;
+        case 'lms_teachers':
+          setTeachers(val);
+          break;
         case 'lms_students':
           setStudents(recalculateRanks(val));
+          break;
+        case 'lms_parents':
+          setParents(val);
           break;
         case 'lms_attendance':
           setAttendanceList(val);
@@ -450,6 +315,39 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
+
+  // Action: Import all data (teachers, students, parents)
+  const importAllData = (newTeachers: Teacher[], newStudents: Student[], newParents: Parent[]) => {
+    setTeachers(newTeachers);
+    setStudents(recalculateRanks(newStudents));
+    setParents(newParents);
+  };
+
+  // Action: Reset/clear entire classroom state
+  const clearAllData = () => {
+    setCurrentUser(null);
+    setTeachers([]);
+    setStudents([]);
+    setParents([]);
+    setAttendanceList([]);
+    setViolations([]);
+    setAssignments([]);
+    setSubmissions([]);
+    setFeedbacks([]);
+    setZaloNotifications([]);
+    setParentCheckedAssignments({});
+    localStorage.removeItem('lms_current_user');
+    localStorage.removeItem('lms_teachers');
+    localStorage.removeItem('lms_students');
+    localStorage.removeItem('lms_parents');
+    localStorage.removeItem('lms_attendance');
+    localStorage.removeItem('lms_violations');
+    localStorage.removeItem('lms_assignments');
+    localStorage.removeItem('lms_submissions');
+    localStorage.removeItem('lms_feedbacks');
+    localStorage.removeItem('lms_zalo_notifications');
+    localStorage.removeItem('lms_parent_checked');
+  };
 
   // Action: Add Student
   const addStudent = (studentData: Omit<Student, 'stars' | 'flags' | 'goldCards' | 'rank'>) => {
@@ -724,7 +622,12 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const dynamicAvailableUsers: User[] = [
-    { id: 'teacher_1', name: localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh', avatar: '👩‍🏫', role: 'teacher' },
+    ...teachers.map(t => ({
+      id: t.id,
+      name: t.name,
+      avatar: t.avatar || '👩‍🏫',
+      role: 'teacher' as const
+    })),
     ...students.filter(s => s.isActive !== false).map(s => ({
       id: s.id,
       name: s.name,
@@ -732,12 +635,12 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       role: 'student' as const,
       studentId: s.id
     })),
-    ...students.filter(s => s.isActive !== false).map(s => ({
-      id: 'parent_' + s.id,
-      name: `Phụ huynh em ${s.name}`,
+    ...parents.map(p => ({
+      id: p.id,
+      name: p.name,
       avatar: '👨',
       role: 'parent' as const,
-      studentId: s.id
+      studentId: p.studentId
     }))
   ];
 
@@ -749,6 +652,10 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         availableUsers: dynamicAvailableUsers,
         students,
         setStudents,
+        teachers,
+        setTeachers,
+        parents,
+        setParents,
         attendanceList,
         violations,
         assignments,
@@ -763,6 +670,8 @@ export const LMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteStudent,
         updateStudent,
         importStudents,
+        importAllData,
+        clearAllData,
         markAttendance,
         deleteAttendance,
         addViolation,

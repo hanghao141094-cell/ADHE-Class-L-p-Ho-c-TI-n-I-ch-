@@ -38,7 +38,7 @@ const getDeviceName = (): string => {
 };
 
 export const LoginView: React.FC = () => {
-  const { students, setStudents, recalculateRanks, settings, setCurrentUser } = useLMS();
+  const { students, setStudents, recalculateRanks, settings, setCurrentUser, teachers, parents } = useLMS();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selectedRole, setSelectedRole] = useState<UserRole>('student');
 
@@ -358,15 +358,24 @@ export const LoginView: React.FC = () => {
     const inputPass = password.trim();
 
     if (selectedRole === 'teacher') {
-      const currentTeacherName = (localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh').trim().toLowerCase();
-      const isValidTeacherName = inputName === 'cô giáo mai anh' || inputName === 'mai anh' || inputName === 'cô mai anh' || inputName === currentTeacherName || currentTeacherName.includes(inputName) || inputName.includes(currentTeacherName);
-      const isTeacherPassCorrect = inputPass === defaultPasswordVal || inputPass === '123' || inputPass === 'admin';
-
-      if (isValidTeacherName && isTeacherPassCorrect) {
-        performActualLogin('teacher', localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh', inputPass);
+      const foundTeacher = teachers.find(t => 
+        t.name.toLowerCase() === inputName || 
+        t.phone === inputName || 
+        t.username.toLowerCase() === inputName
+      );
+      if (foundTeacher) {
+        if (inputPass === '123' || inputPass === '123456' || inputPass === defaultPasswordVal) {
+          performActualLogin('teacher', foundTeacher.name, inputPass);
+        } else {
+          setErrorMessage('Mật khẩu Giáo viên không chính xác!');
+        }
       } else {
-        const teacherSug = localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh';
-        setErrorMessage('Tên Giáo viên hoặc Mật khẩu không chính xác! (Gợi ý: ' + teacherSug + ' / pass: ' + defaultPasswordVal + ')');
+        const fallbackName = 'Cô giáo Mai Anh'.toLowerCase();
+        if (inputName === fallbackName || inputName === 'mai anh') {
+          performActualLogin('teacher', 'Cô giáo Mai Anh', inputPass);
+        } else {
+          setErrorMessage(`Không tìm thấy Giáo viên "${fullName}" trong cơ sở dữ liệu!`);
+        }
       }
     } else if (selectedRole === 'student') {
       const foundStudent = students.find(s => 
@@ -389,24 +398,39 @@ export const LoginView: React.FC = () => {
         setErrorMessage(`Không tìm thấy học sinh có tên, mã hoặc SĐT "${fullName}"!`);
       }
     } else if (selectedRole === 'parent') {
-      const foundStudentByStudentName = students.find(s => s.name.toLowerCase() === inputName);
-      const foundStudentByParentName = students.find(s => s.parentName.toLowerCase() === inputName);
-      const foundStudentByPhone = students.find(s => s.parentPhone === inputName);
-      const matchedStudent = foundStudentByStudentName || foundStudentByParentName || foundStudentByPhone;
-
-      if (matchedStudent) {
-        if (matchedStudent.isActive === false) {
+      const foundParent = parents.find(p => 
+        p.name.toLowerCase() === inputName || 
+        p.phone === inputName || 
+        p.studentName.toLowerCase() === inputName
+      );
+      if (foundParent) {
+        const matchedStudent = students.find(s => s.id === foundParent.studentId || s.name.toLowerCase() === foundParent.studentName.toLowerCase());
+        if (matchedStudent && matchedStudent.isActive === false) {
           setErrorMessage('Tài khoản phụ huynh này chưa được giáo viên kích hoạt! 🏫 Vui lòng đợi cô giáo phê duyệt danh sách.');
           return;
         }
-        const activePass = matchedStudent.parentPassword || defaultPasswordVal;
-        if (inputPass === activePass || inputPass === '123456' || inputPass === '123') {
-          performActualLogin('parent', matchedStudent.parentName || `Phụ huynh em ${matchedStudent.name}`, inputPass);
-        } else {
-          setErrorMessage('Mật khẩu phụ huynh không chính xác!');
-        }
+        performActualLogin('parent', foundParent.name, inputPass);
       } else {
-        setErrorMessage(`Không tìm thấy phụ huynh có tên, tên con hoặc SĐT "${fullName}"!`);
+        // Fallback search in student profiles
+        const foundStudentByStudentName = students.find(s => s.name.toLowerCase() === inputName);
+        const foundStudentByParentName = students.find(s => s.parentName && s.parentName.toLowerCase() === inputName);
+        const foundStudentByPhone = students.find(s => s.parentPhone === inputName);
+        const matchedStudent = foundStudentByStudentName || foundStudentByParentName || foundStudentByPhone;
+
+        if (matchedStudent) {
+          if (matchedStudent.isActive === false) {
+            setErrorMessage('Tài khoản phụ huynh này chưa được giáo viên kích hoạt! 🏫 Vui lòng đợi cô giáo phê duyệt danh sách.');
+            return;
+          }
+          const activePass = matchedStudent.parentPassword || defaultPasswordVal;
+          if (inputPass === activePass || inputPass === '123456' || inputPass === '123') {
+            performActualLogin('parent', matchedStudent.parentName || `Phụ huynh em ${matchedStudent.name}`, inputPass);
+          } else {
+            setErrorMessage('Mật khẩu phụ huynh không chính xác!');
+          }
+        } else {
+          setErrorMessage(`Không tìm thấy phụ huynh có tên, tên con hoặc SĐT "${fullName}"!`);
+        }
       }
     }
   };
@@ -497,18 +521,38 @@ export const LoginView: React.FC = () => {
     });
 
     // 2. Add defaults if not already present
-    if (!list.some(i => i.role === 'teacher')) {
-      list.push({ name: localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh', role: 'teacher', avatar: '👩‍🏫' });
+    if (teachers.length > 0) {
+      teachers.forEach(t => {
+        if (!list.some(i => i.role === 'teacher' && i.name.toLowerCase() === t.name.toLowerCase())) {
+          list.push({ name: t.name, role: 'teacher', avatar: t.avatar || '👩‍🏫' });
+        }
+      });
+    } else {
+      if (!list.some(i => i.role === 'teacher')) {
+        list.push({ name: localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh', role: 'teacher', avatar: '👩‍🏫' });
+      }
     }
+
     students.forEach(s => {
       if (!list.some(i => i.name.toLowerCase() === s.name.toLowerCase() && i.role === 'student')) {
         list.push({ name: s.name, role: 'student', avatar: s.avatar || '👦' });
       }
-      const parentLabel = `PH ${s.name}`;
-      if (!list.some(i => i.role === 'parent' && i.name.includes(s.name))) {
-        list.push({ name: s.parentName || parentLabel, role: 'parent', avatar: '👨' });
-      }
     });
+
+    if (parents.length > 0) {
+      parents.forEach(p => {
+        if (!list.some(i => i.role === 'parent' && i.name.toLowerCase() === p.name.toLowerCase())) {
+          list.push({ name: p.name, role: 'parent', avatar: '👨' });
+        }
+      });
+    } else {
+      students.forEach(s => {
+        const parentLabel = s.parentName || `PH ${s.name}`;
+        if (!list.some(i => i.role === 'parent' && i.name.toLowerCase() === parentLabel.toLowerCase())) {
+          list.push({ name: parentLabel, role: 'parent', avatar: '👨' });
+        }
+      });
+    }
 
     if (!fullName.trim()) return list;
 
