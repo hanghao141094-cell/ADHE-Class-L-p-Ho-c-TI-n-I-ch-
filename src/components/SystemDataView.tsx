@@ -14,9 +14,11 @@ import { motion, AnimatePresence } from 'motion/react';
 
 interface SystemDataViewProps {
   onContinue: () => void;
+  onBack?: () => void;
+  onSyncComplete?: () => void;
 }
 
-export const SystemDataView: React.FC<SystemDataViewProps> = ({ onContinue }) => {
+export const SystemDataView: React.FC<SystemDataViewProps> = ({ onContinue, onBack, onSyncComplete }) => {
   const { 
     teachers, setTeachers, 
     students, setStudents, 
@@ -28,6 +30,7 @@ export const SystemDataView: React.FC<SystemDataViewProps> = ({ onContinue }) =>
   // Selected sub-tab for spreadsheet upload/input
   const [activeImportTab, setActiveImportTab] = useState<'student' | 'teacher' | 'parent'>('student');
   const [showImportPanel, setShowImportPanel] = useState(false);
+  const [showDownloadPanel, setShowDownloadPanel] = useState(false);
 
   // Raw text states for pasting
   const [studentText, setStudentText] = useState('');
@@ -320,7 +323,10 @@ export const SystemDataView: React.FC<SystemDataViewProps> = ({ onContinue }) =>
 
       setTimeout(() => {
         setSyncSuccess(false);
-      }, 3000);
+        if (onSyncComplete) {
+          onSyncComplete();
+        }
+      }, 1500);
     }, 2000);
   };
 
@@ -336,6 +342,47 @@ export const SystemDataView: React.FC<SystemDataViewProps> = ({ onContinue }) =>
     }
   };
 
+  // Dedicated helper to trigger save from outside the panel
+  const handleDirectSaveData = () => {
+    audioSynth.playBubblePop();
+    let savedAny = false;
+    
+    if (studentText.trim()) {
+      const parsed = parseStudents(studentText);
+      if (parsed.length > 0) {
+        setStudents(recalculateRanks(parsed));
+        setStudentText('');
+        savedAny = true;
+      }
+    }
+    
+    if (teacherText.trim()) {
+      const parsed = parseTeachers(teacherText);
+      if (parsed.length > 0) {
+        setTeachers(parsed);
+        setTeacherText('');
+        savedAny = true;
+      }
+    }
+    
+    if (parentText.trim()) {
+      const parsed = parseParents(parentText);
+      if (parsed.length > 0) {
+        setParents(parsed);
+        setParentText('');
+        savedAny = true;
+      }
+    }
+
+    if (savedAny) {
+      alert('💾 Đã lưu thành công dữ liệu vừa nhập vào bộ nhớ hệ thống!');
+      setShowImportPanel(false);
+    } else {
+      alert('⚠️ Không tìm thấy dữ liệu thô mới nào để lưu. Vui lòng bấm "Tải danh sách lên" để dán dữ liệu hoặc kéo thả file mẫu trước!');
+      setShowImportPanel(true);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#FFFEEB] flex items-center justify-center p-4 sm:p-6 font-sans">
       <div className="w-full max-w-4xl bg-white border-4 border-[#FFE082] rounded-[32px] shadow-[0_8px_0_0_#FFE082] p-6 sm:p-8 space-y-6 relative overflow-hidden">
@@ -346,8 +393,21 @@ export const SystemDataView: React.FC<SystemDataViewProps> = ({ onContinue }) =>
         <div className="absolute top-4 right-4 text-4xl select-none animate-bounce" style={{ animationDuration: '3s' }}>🎈</div>
         <div className="absolute bottom-4 left-4 text-4xl select-none">⭐️</div>
 
+        {/* Back navigation button if provided */}
+        {onBack && (
+          <button
+            onClick={() => {
+              audioSynth.playBubblePop();
+              onBack();
+            }}
+            className="absolute top-4 left-4 flex items-center space-x-1 py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition cursor-pointer"
+          >
+            <span>← Chọn lại vai trò</span>
+          </button>
+        )}
+
         {/* Brand Banner */}
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-2 pt-4">
           <div className="inline-flex items-center space-x-1 px-4 py-1.5 bg-amber-100 border-2 border-amber-300 rounded-full text-amber-950 text-xs font-black uppercase tracking-wider shadow-sm">
             <span>🎒 ADHE CLASS v4.0</span>
           </div>
@@ -380,42 +440,57 @@ export const SystemDataView: React.FC<SystemDataViewProps> = ({ onContinue }) =>
           </div>
         </div>
 
-        {/* Main Grid: 5 Sticker Action Buttons */}
+        {/* Main Grid: EXACTLY 5 Actions requested */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           
-          {/* Card 1: Tải file mẫu */}
+          {/* Action 1: 📥 Tải file mẫu */}
           <button
             onClick={() => {
               audioSynth.playBubblePop();
-              setShowImportPanel(true);
+              setShowDownloadPanel(!showDownloadPanel);
+              setShowImportPanel(false);
             }}
-            className="group relative flex flex-col items-center justify-between p-5 bg-[#E8F5E9] hover:bg-[#C8E6C9] border-3 border-[#A5D6A7] rounded-[24px] shadow-[4px_4px_0_0_#A5D6A7] hover:translate-y-0.5 active:translate-y-1 transition duration-200 cursor-pointer text-center h-48"
+            className={`group relative flex flex-col items-center justify-between p-5 bg-[#E8F5E9] hover:bg-[#C8E6C9] border-3 ${showDownloadPanel ? 'border-[#2E7D32] bg-[#C8E6C9]' : 'border-[#A5D6A7]'} rounded-[24px] shadow-[4px_4px_0_0_#A5D6A7] hover:translate-y-0.5 active:translate-y-1 transition duration-200 cursor-pointer text-center h-48`}
           >
             <div className="absolute top-2 right-2 text-xs font-black text-[#2E7D32]/60 select-none">01</div>
             <div className="text-4xl my-auto filter drop-shadow-sm select-none group-hover:scale-110 transition">📥</div>
             <div className="space-y-1 mt-auto">
               <h3 className="text-xs font-black text-[#1B5E20] uppercase tracking-tight">Tải file mẫu</h3>
-              <p className="text-[10px] text-[#2E7D32] font-bold leading-tight">Hộp thư & tệp Excel định dạng chuẩn</p>
+              <p className="text-[10px] text-[#2E7D32] font-bold leading-tight">Biểu mẫu chuẩn học sinh, giáo viên, phụ huynh</p>
             </div>
           </button>
 
-          {/* Card 2: Nhập danh sách */}
+          {/* Action 2: 📤 Tải danh sách lên */}
           <button
             onClick={() => {
               audioSynth.playBubblePop();
-              setShowImportPanel(true);
+              setShowImportPanel(!showImportPanel);
+              setShowDownloadPanel(false);
             }}
-            className="group relative flex flex-col items-center justify-between p-5 bg-[#E1F5FE] hover:bg-[#B3E5FC] border-3 border-[#81D4FA] rounded-[24px] shadow-[4px_4px_0_0_#81D4FA] hover:translate-y-0.5 active:translate-y-1 transition duration-200 cursor-pointer text-center h-48"
+            className={`group relative flex flex-col items-center justify-between p-5 bg-[#E1F5FE] hover:bg-[#B3E5FC] border-3 ${showImportPanel ? 'border-[#0277BD] bg-[#B3E5FC]' : 'border-[#81D4FA]'} rounded-[24px] shadow-[4px_4px_0_0_#81D4FA] hover:translate-y-0.5 active:translate-y-1 transition duration-200 cursor-pointer text-center h-48`}
           >
             <div className="absolute top-2 right-2 text-xs font-black text-[#0277BD]/60 select-none">02</div>
             <div className="text-4xl my-auto filter drop-shadow-sm select-none group-hover:scale-110 transition">📤</div>
             <div className="space-y-1 mt-auto">
-              <h3 className="text-xs font-black text-[#01579B] uppercase tracking-tight">Nhập danh sách</h3>
-              <p className="text-[10px] text-[#0277BD] font-bold leading-tight">Máy tính & mũi tên tải lên tiện lợi</p>
+              <h3 className="text-xs font-black text-[#01579B] uppercase tracking-tight">Tải danh sách lên</h3>
+              <p className="text-[10px] text-[#0277BD] font-bold leading-tight">Chọn hoặc kéo thả file danh sách lớp học</p>
             </div>
           </button>
 
-          {/* Card 3: Đồng bộ dữ liệu */}
+          {/* Action 3: 💾 Lưu dữ liệu */}
+          <button
+            onClick={handleDirectSaveData}
+            className="group relative flex flex-col items-center justify-between p-5 bg-[#E0F7FA] hover:bg-[#B2EBF2] border-3 border-[#4DD0E1] rounded-[24px] shadow-[4px_4px_0_0_#4DD0E1] hover:translate-y-0.5 active:translate-y-1 transition duration-200 cursor-pointer text-center h-48"
+          >
+            <div className="absolute top-2 right-2 text-xs font-black text-[#006064]/60 select-none">03</div>
+            <div className="text-4xl my-auto filter drop-shadow-sm select-none group-hover:scale-110 transition">💾</div>
+            <div className="space-y-1 mt-auto">
+              <h3 className="text-xs font-black text-[#006064] uppercase tracking-tight">Lưu dữ liệu</h3>
+              <p className="text-[10px] text-[#00838F] font-bold leading-tight">Lưu trữ các thay đổi dữ liệu vào hệ thống</p>
+            </div>
+          </button>
+
+          {/* Action 4: 🔄 Đồng bộ dữ liệu */}
           <button
             onClick={handleSyncData}
             disabled={syncing}
@@ -423,46 +498,24 @@ export const SystemDataView: React.FC<SystemDataViewProps> = ({ onContinue }) =>
               syncing ? 'opacity-80' : 'hover:bg-[#E1BEE7]'
             } border-3 border-[#CE93D8] rounded-[24px] shadow-[4px_4px_0_0_#CE93D8] hover:translate-y-0.5 active:translate-y-1 transition duration-200 cursor-pointer text-center h-48`}
           >
-            <div className="absolute top-2 right-2 text-xs font-black text-[#6A1B9A]/60 select-none">03</div>
+            <div className="absolute top-2 right-2 text-xs font-black text-[#6A1B9A]/60 select-none">04</div>
             <div className={`text-4xl my-auto filter drop-shadow-sm select-none group-hover:scale-110 transition ${syncing ? 'animate-spin' : ''}`}>🔄</div>
             <div className="space-y-1 mt-auto">
               <h3 className="text-xs font-black text-[#4A148C] uppercase tracking-tight">Đồng bộ dữ liệu</h3>
-              <p className="text-[10px] text-[#6A1B9A] font-bold leading-tight">Hai mũi tên liên kết học sinh - phụ huynh</p>
+              <p className="text-[10px] text-[#6A1B9A] font-bold leading-tight">Liên kết thông tin & tạo tài khoản đăng nhập</p>
             </div>
           </button>
 
-          {/* Card 4: Làm mới hệ thống */}
+          {/* Action 5: 🧹 Làm mới dữ liệu */}
           <button
             onClick={handleResetSystem}
             className="group relative flex flex-col items-center justify-between p-5 bg-[#FFEBEE] hover:bg-[#FFCDD2] border-3 border-[#EF9A9A] rounded-[24px] shadow-[4px_4px_0_0_#EF9A9A] hover:translate-y-0.5 active:translate-y-1 transition duration-200 cursor-pointer text-center h-48"
           >
-            <div className="absolute top-2 right-2 text-xs font-black text-[#C62828]/60 select-none">04</div>
+            <div className="absolute top-2 right-2 text-xs font-black text-[#C62828]/60 select-none">05</div>
             <div className="text-4xl my-auto filter drop-shadow-sm select-none group-hover:scale-110 transition">🧹</div>
             <div className="space-y-1 mt-auto">
-              <h3 className="text-xs font-black text-[#B71C1C] uppercase tracking-tight">Làm mới hệ thống</h3>
-              <p className="text-[10px] text-[#C62828] font-bold leading-tight">Cây chổi dọn dẹp sạch sẽ dữ liệu cũ</p>
-            </div>
-          </button>
-
-          {/* Card 5: Tiếp tục đăng nhập */}
-          <button
-            onClick={() => {
-              audioSynth.playBubblePop();
-              if (studentCount === 0 && teacherCount === 0) {
-                if (window.confirm('⚠️ Bạn chưa nạp dữ liệu giáo viên hoặc học sinh nào vào cơ sở dữ liệu. Bạn có muốn tiếp tục đăng nhập không? (Không thể đăng nhập nếu cơ sở dữ liệu rỗng).')) {
-                  onContinue();
-                }
-              } else {
-                onContinue();
-              }
-            }}
-            className="group relative flex flex-col items-center justify-between p-5 bg-[#FFFDE7] hover:bg-[#FFF9C4] border-3 border-[#FFF59D] rounded-[24px] shadow-[4px_4px_0_0_#FFF59D] hover:translate-y-0.5 active:translate-y-1 transition duration-200 cursor-pointer text-center h-48"
-          >
-            <div className="absolute top-2 right-2 text-xs font-black text-[#F57F17]/60 select-none">05</div>
-            <div className="text-4xl my-auto filter drop-shadow-sm select-none group-hover:scale-110 transition">🔐</div>
-            <div className="space-y-1 mt-auto">
-              <h3 className="text-xs font-black text-[#E65100] uppercase tracking-tight">Vào đăng nhập</h3>
-              <p className="text-[10px] text-[#F57F17] font-bold leading-tight">Ổ khóa mở cổng ứng dụng thông minh</p>
+              <h3 className="text-xs font-black text-[#B71C1C] uppercase tracking-tight">Làm mới dữ liệu</h3>
+              <p className="text-[10px] text-[#C62828] font-bold leading-tight">Dọn dẹp sạch sẽ bộ nhớ cơ sở dữ liệu</p>
             </div>
           </button>
 
@@ -486,6 +539,64 @@ export const SystemDataView: React.FC<SystemDataViewProps> = ({ onContinue }) =>
           </button>
         </div>
 
+        {/* 📥 DOWNLOAD EXCEL/CSV FORMS TEMPLATE DRAWER */}
+        <AnimatePresence>
+          {showDownloadPanel && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="bg-emerald-50/50 border-2 border-emerald-200 rounded-[24px] p-5 space-y-4 overflow-hidden text-left"
+            >
+              <div className="flex items-center justify-between border-b border-emerald-100 pb-2">
+                <h3 className="text-xs font-black text-emerald-900 uppercase tracking-wide flex items-center space-x-1.5">
+                  <span>📥 TẢI BIỂU MẪU CHUẨN (HỖ TRỢ EXCEL .XLSX / CSV)</span>
+                </h3>
+                <button 
+                  onClick={() => { audioSynth.playBubblePop(); setShowDownloadPanel(false); }}
+                  className="text-xs font-black text-emerald-700 hover:text-emerald-850 cursor-pointer bg-white border border-emerald-200 px-2.5 py-1 rounded-lg"
+                >
+                  Đóng panel ✕
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                Thầy cô vui lòng chọn loại biểu mẫu cần chuẩn hóa. Hệ thống hỗ trợ tải file CSV định dạng chuẩn, có thể chỉnh sửa trực tiếp trên Excel cực kỳ thuận tiện:
+              </p>
+
+              {/* Individual template forms */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <button
+                  onClick={() => downloadTemplate('student')}
+                  className="p-4 bg-white border-2 border-emerald-100 hover:border-emerald-300 rounded-2xl flex flex-col items-center justify-center space-y-2 text-center group cursor-pointer transition transform hover:-translate-y-0.5 active:translate-y-0"
+                >
+                  <span className="text-3xl">👦</span>
+                  <span className="text-xs font-black text-emerald-900">📥 Tải mẫu học sinh</span>
+                  <span className="text-[10px] text-slate-400 font-bold leading-tight">Danh sách các học sinh của lớp</span>
+                </button>
+
+                <button
+                  onClick={() => downloadTemplate('teacher')}
+                  className="p-4 bg-white border-2 border-emerald-100 hover:border-emerald-300 rounded-2xl flex flex-col items-center justify-center space-y-2 text-center group cursor-pointer transition transform hover:-translate-y-0.5 active:translate-y-0"
+                >
+                  <span className="text-3xl">👩‍🏫</span>
+                  <span className="text-xs font-black text-emerald-900">📥 Tải mẫu giáo viên</span>
+                  <span className="text-[10px] text-slate-400 font-bold leading-tight">Danh mục tài khoản của giáo viên</span>
+                </button>
+
+                <button
+                  onClick={() => downloadTemplate('parent')}
+                  className="p-4 bg-white border-2 border-emerald-100 hover:border-emerald-300 rounded-2xl flex flex-col items-center justify-center space-y-2 text-center group cursor-pointer transition transform hover:-translate-y-0.5 active:translate-y-0"
+                >
+                  <span className="text-3xl">👨‍👩‍👧</span>
+                  <span className="text-xs font-black text-emerald-900">📥 Tải mẫu phụ huynh</span>
+                  <span className="text-[10px] text-slate-400 font-bold leading-tight">Mã liên kết phụ huynh - học sinh</span>
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Slide-out/Toggleable Cute CSV upload form drawer */}
         <AnimatePresence>
           {showImportPanel && (
@@ -497,7 +608,7 @@ export const SystemDataView: React.FC<SystemDataViewProps> = ({ onContinue }) =>
             >
               <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                 <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center space-x-1.5">
-                  <span>📂 Khu vực nhập dữ liệu chi tiết</span>
+                  <span>📂 Tải danh sách lên & Nhập dữ liệu chi tiết</span>
                 </h3>
                 <button 
                   onClick={() => { audioSynth.playBubblePop(); setShowImportPanel(false); }}
@@ -510,6 +621,7 @@ export const SystemDataView: React.FC<SystemDataViewProps> = ({ onContinue }) =>
               {/* Sub-tabs for Student, Teacher, Parent CSV templates */}
               <div className="flex bg-slate-200/50 p-1 rounded-xl">
                 <button
+                  type="button"
                   onClick={() => { audioSynth.playBubblePop(); setActiveImportTab('student'); }}
                   className={`flex-1 py-1.5 text-[11px] font-black uppercase tracking-wider rounded-lg transition ${
                     activeImportTab === 'student' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-500 hover:text-slate-700'
@@ -518,6 +630,7 @@ export const SystemDataView: React.FC<SystemDataViewProps> = ({ onContinue }) =>
                   👦 Học sinh
                 </button>
                 <button
+                  type="button"
                   onClick={() => { audioSynth.playBubblePop(); setActiveImportTab('teacher'); }}
                   className={`flex-1 py-1.5 text-[11px] font-black uppercase tracking-wider rounded-lg transition ${
                     activeImportTab === 'teacher' ? 'bg-white text-sky-800 shadow-xs' : 'text-slate-500 hover:text-slate-700'
@@ -526,6 +639,7 @@ export const SystemDataView: React.FC<SystemDataViewProps> = ({ onContinue }) =>
                   👩‍🏫 Giáo viên
                 </button>
                 <button
+                  type="button"
                   onClick={() => { audioSynth.playBubblePop(); setActiveImportTab('parent'); }}
                   className={`flex-1 py-1.5 text-[11px] font-black uppercase tracking-wider rounded-lg transition ${
                     activeImportTab === 'parent' ? 'bg-white text-purple-800 shadow-xs' : 'text-slate-500 hover:text-slate-700'
@@ -537,7 +651,7 @@ export const SystemDataView: React.FC<SystemDataViewProps> = ({ onContinue }) =>
 
               {/* CSV actions */}
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs bg-white p-3 rounded-xl border border-slate-200">
-                <div className="font-bold text-slate-600">
+                <div className="font-bold text-slate-600 text-left">
                   {activeImportTab === 'student' && "💡 Cấu trúc: STT, Mã học sinh, Họ và tên, Giới tính, Ngày sinh."}
                   {activeImportTab === 'teacher' && "💡 Cấu trúc: STT, Họ và tên, Số điện thoại, Tài khoản."}
                   {activeImportTab === 'parent' && "💡 Cấu trúc: STT, Họ tên phụ huynh, Số điện thoại, Tên học sinh, Mã học sinh."}
@@ -547,7 +661,7 @@ export const SystemDataView: React.FC<SystemDataViewProps> = ({ onContinue }) =>
                   className="flex items-center space-x-1 shrink-0 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-950 border-2 border-amber-300 rounded-xl font-bold cursor-pointer transition text-xs"
                 >
                   <Download className="h-3.5 w-3.5" />
-                  <span>Tải file Excel mẫu 📥</span>
+                  <span>Tải file mẫu 📥</span>
                 </button>
               </div>
 
@@ -577,7 +691,7 @@ export const SystemDataView: React.FC<SystemDataViewProps> = ({ onContinue }) =>
                 </div>
 
                 {/* Paste Direct textarea */}
-                <div className="space-y-1">
+                <div className="space-y-1 text-left">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-wide">Nhập hoặc dán các dòng dữ liệu (CSV)</span>
                     <span className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-bold">Mỗi hàng 1 dòng</span>
@@ -616,6 +730,25 @@ export const SystemDataView: React.FC<SystemDataViewProps> = ({ onContinue }) =>
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Big TIẾP TỤC ĐĂNG NHẬP button */}
+        <div className="pt-4 border-t-2 border-slate-100">
+          <button
+            onClick={() => {
+              audioSynth.playBubblePop();
+              if (studentCount === 0 && teacherCount === 0) {
+                if (window.confirm('⚠️ Bạn chưa nạp dữ liệu giáo viên hoặc học sinh nào vào cơ sở dữ liệu. Bạn có muốn tiếp tục đăng nhập không? (Không thể đăng nhập nếu cơ sở dữ liệu rỗng).')) {
+                  onContinue();
+                }
+              } else {
+                onContinue();
+              }
+            }}
+            className="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-sm uppercase tracking-widest rounded-2xl cursor-pointer shadow-md hover:shadow-lg transition duration-200 transform active:scale-98 flex items-center justify-center space-x-2"
+          >
+            <span>🔐 TIẾP TỤC ĐĂNG NHẬP ➔</span>
+          </button>
+        </div>
 
         {/* Sync loading overlay */}
         <AnimatePresence>

@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { LMSProvider, useLMS } from './context/LMSContext';
 import { LoginView } from './components/LoginView';
 import { SystemDataView } from './components/SystemDataView';
+import { RoleSelectionView } from './components/RoleSelectionView';
 import { BannerSlider } from './components/BannerSlider';
 import { EducationalLinks } from './components/EducationalLinks';
 import { TeacherView } from './components/TeacherView';
@@ -382,15 +383,76 @@ export default function App() {
 // Subwrapper to consume context safely
 function LMSConsumerWrapper() {
   const { currentUser } = useLMS();
-  const [showSystemDataScreen, setShowSystemDataScreen] = useState(true);
+  const [flow, setFlow] = useState<'choose_role' | 'system_data' | 'login_teacher' | 'login_student' | 'login_parent'>('choose_role');
 
-  if (showSystemDataScreen && !currentUser) {
-    return <SystemDataView onContinue={() => setShowSystemDataScreen(false)} />;
+  if (currentUser) {
+    return <DashboardContainer />;
   }
 
-  if (!currentUser) {
-    return <LoginView />;
+  if (flow === 'choose_role') {
+    return (
+      <RoleSelectionView
+        onSelectRole={(role) => {
+          if (role === 'teacher') {
+            setFlow('system_data');
+          } else if (role === 'student') {
+            setFlow('login_student');
+          } else if (role === 'parent') {
+            setFlow('login_parent');
+          }
+        }}
+      />
+    );
   }
 
-  return <DashboardContainer />;
+  if (flow === 'system_data') {
+    return (
+      <SystemDataView
+        onContinue={() => setFlow('login_teacher')}
+        onBack={() => setFlow('choose_role')}
+        onSyncComplete={() => setFlow('choose_role')}
+      />
+    );
+  }
+
+  if (flow === 'login_teacher') {
+    return (
+      <LoginView
+        forcedRole="teacher"
+        onBack={() => setFlow('system_data')}
+      />
+    );
+  }
+
+  if (flow === 'login_student') {
+    return (
+      <LoginView
+        forcedRole="student"
+        onBack={() => setFlow('choose_role')}
+      />
+    );
+  }
+
+  if (flow === 'login_parent') {
+    return (
+      <LoginView
+        forcedRole="parent"
+        onBack={() => setFlow('choose_role')}
+      />
+    );
+  }
+
+  return (
+    <RoleSelectionView
+      onSelectRole={(role) => {
+        if (role === 'teacher') {
+          setFlow('system_data');
+        } else if (role === 'student') {
+          setFlow('login_student');
+        } else if (role === 'parent') {
+          setFlow('login_parent');
+        }
+      }}
+    />
+  );
 }

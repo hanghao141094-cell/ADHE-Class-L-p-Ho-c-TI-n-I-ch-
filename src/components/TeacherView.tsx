@@ -4586,7 +4586,7 @@ export const TeacherView: React.FC = () => {
                             onChange={(e) => {
                               audioSynth.playBubblePop();
                               if (e.target.files) {
-                                const list = Array.from(e.target.files).map(f => ({
+                                const list = Array.from(e.target.files).map((f: any) => ({
                                   name: f.name,
                                   size: (f.size / 1024).toFixed(1) + ' KB',
                                   type: f.type

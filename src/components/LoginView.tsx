@@ -37,10 +37,21 @@ const getDeviceName = (): string => {
   return "Trình duyệt Web 🌐";
 };
 
-export const LoginView: React.FC = () => {
+interface LoginViewProps {
+  forcedRole?: UserRole;
+  onBack?: () => void;
+}
+
+export const LoginView: React.FC<LoginViewProps> = ({ forcedRole, onBack }) => {
   const { students, setStudents, recalculateRanks, settings, setCurrentUser, teachers, parents } = useLMS();
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<UserRole>('student');
+  const [selectedRole, setSelectedRole] = useState<UserRole>(forcedRole || 'student');
+
+  useEffect(() => {
+    if (forcedRole) {
+      setSelectedRole(forcedRole);
+    }
+  }, [forcedRole]);
 
   const handleDownloadTemplate = () => {
     audioSynth.playBubblePop();
@@ -593,6 +604,19 @@ export const LoginView: React.FC = () => {
         {/* Header Title */}
         <div className="flex items-center justify-between border-b-2 border-indigo-50 pb-4">
           <div className="flex items-center space-x-3 text-left">
+            {onBack && (
+              <button
+                type="button"
+                onClick={() => {
+                  audioSynth.playBubblePop();
+                  onBack();
+                }}
+                className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition duration-150 flex items-center justify-center shrink-0 font-black text-xs"
+                title="Quay lại chọn vai trò"
+              >
+                ←
+              </button>
+            )}
             <span className="p-3 bg-indigo-500 text-white rounded-2xl text-2xl shadow-md">🏫</span>
             <div>
               <h1 className="text-lg font-black text-indigo-950 uppercase tracking-tight">
@@ -635,53 +659,55 @@ export const LoginView: React.FC = () => {
           <div className="space-y-6">
             
             {/* 1. SELECT ROLE BUTTONS */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  audioSynth.playBubblePop();
-                  setSelectedRole('teacher');
-                  setErrorMessage('');
-                  setFullName(localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh');
-                }}
-                className={`py-3.5 px-3 rounded-2xl border-2 text-center flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs ${
-                  selectedRole === 'teacher'
-                    ? 'border-indigo-500 bg-indigo-50/40 text-indigo-950 font-black'
-                    : 'border-slate-100 bg-white hover:border-slate-300 text-slate-600'
-                }`}
-              >
-                <span className="p-1.5 bg-indigo-50 rounded-xl mb-1 text-xl">
-                  👨‍🏫
-                </span>
-                <span className="text-xs font-black">👨‍🏫 Giáo viên</span>
-              </button>
+            {!forcedRole && (
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    audioSynth.playBubblePop();
+                    setSelectedRole('teacher');
+                    setErrorMessage('');
+                    setFullName(localStorage.getItem('lms_teacher_name') || 'Cô giáo Mai Anh');
+                  }}
+                  className={`py-3.5 px-3 rounded-2xl border-2 text-center flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs ${
+                    selectedRole === 'teacher'
+                      ? 'border-indigo-500 bg-indigo-50/40 text-indigo-950 font-black'
+                      : 'border-slate-100 bg-white hover:border-slate-300 text-slate-600'
+                  }`}
+                >
+                  <span className="p-1.5 bg-indigo-50 rounded-xl mb-1 text-xl">
+                    👨‍🏫
+                  </span>
+                  <span className="text-xs font-black">👨‍🏫 Giáo viên</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  audioSynth.playBubblePop();
-                  setSelectedRole('student');
-                  setErrorMessage('');
-                  setFullName(students[0]?.name || 'Nguyễn An');
-                }}
-                className={`py-3.5 px-3 rounded-2xl border-2 text-center flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs ${
-                  (selectedRole === 'student' || selectedRole === 'parent')
-                    ? 'border-indigo-500 bg-indigo-50/40 text-indigo-950 font-black'
-                    : 'border-slate-100 bg-white hover:border-slate-300 text-slate-600'
-                }`}
-              >
-                <span className="p-1.5 bg-indigo-50 rounded-xl mb-1 text-xl">
-                  👨‍🎓
-                </span>
-                <span className="text-xs font-black">👨‍🎓 Học sinh – Phụ huynh</span>
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    audioSynth.playBubblePop();
+                    setSelectedRole('student');
+                    setErrorMessage('');
+                    setFullName(students[0]?.name || 'Nguyễn An');
+                  }}
+                  className={`py-3.5 px-3 rounded-2xl border-2 text-center flex flex-col items-center justify-center transition-all cursor-pointer shadow-xs ${
+                    (selectedRole === 'student' || selectedRole === 'parent')
+                      ? 'border-indigo-500 bg-indigo-50/40 text-indigo-950 font-black'
+                      : 'border-slate-100 bg-white hover:border-slate-300 text-slate-600'
+                  }`}
+                >
+                  <span className="p-1.5 bg-indigo-50 rounded-xl mb-1 text-xl">
+                    👨‍🎓
+                  </span>
+                  <span className="text-xs font-black">👨‍🎓 Học sinh – Phụ huynh</span>
+                </button>
+              </div>
+            )}
 
             {/* 2. FORM */}
             <form onSubmit={handleLoginSubmit} className="space-y-4 text-left">
               
               {/* Secondary role selection toggle for Học sinh & Phụ huynh */}
-              {(selectedRole === 'student' || selectedRole === 'parent') && (
+              {(selectedRole === 'student' || selectedRole === 'parent') && !forcedRole && (
                 <div className="bg-slate-100/80 p-1 rounded-xl flex items-center justify-between text-xs font-black text-slate-600 mb-2 border border-slate-200">
                   <button
                     type="button"
@@ -880,69 +906,71 @@ export const LoginView: React.FC = () => {
       </div>
 
       {/* DEDICATED BOTTOM ACTIONS FOOTER FOR FILE TEMPLATE AND UPLOAD */}
-      <div className="max-w-xl w-full bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 border-4 border-indigo-500 shadow-xl space-y-4 mt-6 z-10 relative overflow-hidden animate-fadeIn">
-        <div className="absolute top-0 right-0 text-6xl opacity-10 select-none pointer-events-none mt-1 mr-2">📥📤✨</div>
-        <div className="text-left border-b border-white/10 pb-3">
-          <h3 className="text-base font-black text-indigo-200 flex items-center space-x-2">
-            <span>⚙️ TIỆN ÍCH QUẢN LÝ TỆP TIN DANH SÁCH LỚP HỌC</span>
-          </h3>
-          <p className="text-xs text-indigo-300 font-bold mt-1">
-            Thực hiện quy trình tải tệp biểu mẫu tiêu chuẩn và nhập hàng loạt danh sách học sinh lên hệ thống nhanh chóng.
-          </p>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
-          {/* Left Button */}
-          <div className="bg-white/5 border border-white/10 p-4 rounded-2xl hover:bg-white/10 transition-all flex flex-col justify-between space-y-3">
-            <div>
-              <h4 className="text-xs font-black text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Download className="h-4 w-4 shrink-0" />
-                <span>Bước 1: Tải file mẫu danh sách</span>
-              </h4>
-              <p className="text-[11px] text-slate-300 font-medium leading-relaxed mt-1">
-                Giúp giáo viên tải xuống biểu mẫu chuẩn để nhập thông tin học sinh theo đúng định dạng của hệ thống.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleDownloadTemplate}
-              className="w-full flex items-center justify-center space-x-1.5 py-3 px-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black cursor-pointer shadow-md transition-all uppercase tracking-wider active:scale-95"
-            >
-              <Download className="h-4 w-4 animate-pulse shrink-0" />
-              <span>Tải file mẫu danh sách 📥</span>
-            </button>
+      {selectedRole === 'teacher' && !forcedRole && (
+        <div className="max-w-xl w-full bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 border-4 border-indigo-500 shadow-xl space-y-4 mt-6 z-10 relative overflow-hidden animate-fadeIn">
+          <div className="absolute top-0 right-0 text-6xl opacity-10 select-none pointer-events-none mt-1 mr-2">📥📤✨</div>
+          <div className="text-left border-b border-white/10 pb-3">
+            <h3 className="text-base font-black text-indigo-200 flex items-center space-x-2">
+              <span>⚙️ TIỆN ÍCH QUẢN LÝ TỆP TIN DANH SÁCH LỚP HỌC</span>
+            </h3>
+            <p className="text-xs text-indigo-300 font-bold mt-1">
+              Thực hiện quy trình tải tệp biểu mẫu tiêu chuẩn và nhập hàng loạt danh sách học sinh lên hệ thống nhanh chóng.
+            </p>
           </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+            {/* Left Button */}
+            <div className="bg-white/5 border border-white/10 p-4 rounded-2xl hover:bg-white/10 transition-all flex flex-col justify-between space-y-3">
+              <div>
+                <h4 className="text-xs font-black text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Download className="h-4 w-4 shrink-0" />
+                  <span>Bước 1: Tải file mẫu danh sách</span>
+                </h4>
+                <p className="text-[11px] text-slate-300 font-medium leading-relaxed mt-1">
+                  Giúp giáo viên tải xuống biểu mẫu chuẩn để nhập thông tin học sinh theo đúng định dạng của hệ thống.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleDownloadTemplate}
+                className="w-full flex items-center justify-center space-x-1.5 py-3 px-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black cursor-pointer shadow-md transition-all uppercase tracking-wider active:scale-95"
+              >
+                <Download className="h-4 w-4 animate-pulse shrink-0" />
+                <span>Tải file mẫu danh sách 📥</span>
+              </button>
+            </div>
 
-          {/* Right Button */}
-          <div className="bg-white/5 border border-white/10 p-4 rounded-2xl hover:bg-white/10 transition-all flex flex-col justify-between space-y-3">
-            <div>
-              <h4 className="text-xs font-black text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Upload className="h-4 w-4 shrink-0" />
-                <span>Bước 2: Đưa file mẫu lên</span>
-              </h4>
-              <p className="text-[11px] text-slate-300 font-medium leading-relaxed mt-1">
-                Cho phép giáo viên tải tệp danh sách đã hoàn thiện lên hệ thống. Sau khi tải thành công, dữ liệu sẽ được tự động lưu vào cơ sở dữ liệu và cập nhật danh sách học sinh của lớp.
-              </p>
+            {/* Right Button */}
+            <div className="bg-white/5 border border-white/10 p-4 rounded-2xl hover:bg-white/10 transition-all flex flex-col justify-between space-y-3">
+              <div>
+                <h4 className="text-xs font-black text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Upload className="h-4 w-4 shrink-0" />
+                  <span>Bước 2: Đưa file mẫu lên</span>
+                </h4>
+                <p className="text-[11px] text-slate-300 font-medium leading-relaxed mt-1">
+                  Cho phép giáo viên tải tệp danh sách đã hoàn thiện lên hệ thống. Sau khi tải thành công, dữ liệu sẽ được tự động lưu vào cơ sở dữ liệu và cập nhật danh sách học sinh của lớp.
+                </p>
+              </div>
+              <label 
+                className="w-full flex items-center justify-center space-x-1.5 py-3 px-4 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-xs font-black cursor-pointer shadow-md transition-all text-center uppercase tracking-wider active:scale-95 text-[11px]"
+              >
+                <Upload className="h-4 w-4 shrink-0 animate-bounce" />
+                <span>Đưa file mẫu lên 📤</span>
+                <input
+                  type="file"
+                  accept=".csv,.txt"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+              </label>
             </div>
-            <label 
-              className="w-full flex items-center justify-center space-x-1.5 py-3 px-4 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-xs font-black cursor-pointer shadow-md transition-all text-center uppercase tracking-wider active:scale-95 text-[11px]"
-            >
-              <Upload className="h-4 w-4 shrink-0 animate-bounce" />
-              <span>Đưa file mẫu lên 📤</span>
-              <input
-                type="file"
-                accept=".csv,.txt"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-            </label>
+          </div>
+          
+          <div className="bg-indigo-950/80 p-3.5 rounded-xl border border-indigo-800/60 text-[11px] text-indigo-200 font-bold leading-relaxed text-left">
+            💡 <strong>Cấu trúc file mẫu danh sách:</strong> Cấu trúc file mẫu được quy định như sau: dòng đầu tiên mặc định là thông tin Giáo viên, từ dòng thứ hai trở đi là danh sách Học sinh. Hệ thống sẽ tự động nhận diện và phân loại dữ liệu theo cấu trúc này khi nhập danh sách vào cơ sở dữ liệu. Việc bố trí hai nút chức năng này giúp giáo viên dễ dàng thực hiện quy trình tải mẫu, nhập dữ liệu và đồng bộ danh sách học sinh một cách nhanh chóng, thuận tiện và chính xác.
           </div>
         </div>
-        
-        <div className="bg-indigo-950/80 p-3.5 rounded-xl border border-indigo-800/60 text-[11px] text-indigo-200 font-bold leading-relaxed text-left">
-          💡 <strong>Cấu trúc file mẫu danh sách:</strong> Cấu trúc file mẫu được quy định như sau: dòng đầu tiên mặc định là thông tin Giáo viên, từ dòng thứ hai trở đi là danh sách Học sinh. Hệ thống sẽ tự động nhận diện và phân loại dữ liệu theo cấu trúc này khi nhập danh sách vào cơ sở dữ liệu. Việc bố trí hai nút chức năng này giúp giáo viên dễ dàng thực hiện quy trình tải mẫu, nhập dữ liệu và đồng bộ danh sách học sinh một cách nhanh chóng, thuận tiện và chính xác.
-        </div>
-      </div>
+      )}
 
       {/* LOGIN HISTORY MODAL */}
       <AnimatePresence>
